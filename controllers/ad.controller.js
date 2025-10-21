@@ -30,12 +30,27 @@ export const createAd = async (req, res) => {
 
 export const getAllAds = async (req, res) => {
   try {
-    const ads = await Ad.find().populate([{ path: "seller", select: "name email" }, { path: "category", select: "name description" }]).sort({ createdAt: -1 });
+    console.log("Fetching ads for userId:", req.params.userId);
+    let ads = []
+     ads = await Ad.find().populate([{ path: "seller", select: "name email" }, { path: "category", select: "name description" }]).sort({ createdAt: -1 });
+
     res.json(ads);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
+export const getUserAds = async (req, res) => {
+  try {
+    let userId = req.body.id;
+    console.log("Fetching ads for userId:", req.params.id);
+    let ads = []
+     ads = await Ad.find({ seller: userId }).populate([{ path: "seller", select: "name email" }, { path: "category", select: "name description" }]).sort({ createdAt: -1 });
+    res.json(ads);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 export const getAllAdCategories = async (req, res) => {
   try {
     console.log("Fetching all ad categories");
