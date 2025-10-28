@@ -1,3 +1,24 @@
+export const editAd = async (req, res) => {
+  try {
+    console.log("[PUT] /api/ads/edit/:id - Body:", req.body);
+    const adId = req.params.id;
+    // Collect update data
+    const updateData = { ...req.body };
+    // If new images are uploaded, handle them
+    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+      updateData.images = req.files.map(file => file.path || file.location || file.url);
+    }
+    // Prevent changing the seller or _id
+    delete updateData.seller;
+    delete updateData._id;
+    // Update the ad
+    const updatedAd = await Ad.findByIdAndUpdate(adId, updateData, { new: true });
+    if (!updatedAd) return res.status(404).json({ message: "Ad not found" });
+    res.json(updatedAd);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
 import Ad from "../models/ad.model.js";
 import AdCategory from "../models/ad.category.model.js";
 export const createAd = async (req, res) => {
