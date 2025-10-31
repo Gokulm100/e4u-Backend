@@ -59,6 +59,32 @@ export const getLatestMessages = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+export const getUserMessages = async (req, res) => {
+  try {
+    const currentUserId = new mongoose.Types.ObjectId(req.user?.id);
+    if (!currentUserId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+
+    // Find messages between the two users for the specified ad
+    const messages = await Chat.find({
+      to: currentUserId,
+      seenAt: null
+    })
+      .populate([{ path: "from", select: "name email" }, { path: "to", select: "name email" }])
+      .sort({ createdAt: 1 });
+
+    const count = await Chat.countDocuments({
+      to: currentUserId,
+      seenAt: null
+    });
+
+    res.json({ messages, count });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
 export const getChats = async (req, res) => {
   try {
     const { adId, userId } = req.query;

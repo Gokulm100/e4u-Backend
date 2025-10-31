@@ -10,6 +10,10 @@ const chatSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    seenAt: {
+        type: Date,
+        default: null
+    },
     to: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
 
     from: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
