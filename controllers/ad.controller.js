@@ -126,11 +126,12 @@ export const createChat = async (req, res) => {
 };
 export const editAd = async (req, res) => {
   try {
-    console.log("[PUT] /api/ads/edit/:id - Body:", req.body);
+    // console.log("[PUT] /api/ads/edit/:id - Body:", req.body);
     const adId = req.params.id;
     // Collect update data
     const updateData = { ...req.body };
     // If new images are uploaded, handle them
+    console.log("Updating ad with files:", adId, "with data:", req.files);
     if (req.files && Array.isArray(req.files) && req.files.length > 0) {
       updateData.images = req.files.map(file => file.path || file.location || file.url);
     }
