@@ -11,6 +11,10 @@ const adCategorySchema = new mongoose.Schema({
         type: String,
         default: ''
     },
+    subCategory: {
+        type: Array,
+        default: []
+    },
     isActive: {
         type: Boolean,
         default: true

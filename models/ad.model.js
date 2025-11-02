@@ -6,6 +6,7 @@ const adSchema = new mongoose.Schema(
         price: { type: Number, required: true },
         location: { type: String, required: true },
         category: { type: mongoose.Schema.Types.ObjectId, ref: "AdCategory", required: true },
+        subCategory: { type: String, required: false },
         images: [{ type: String, required: true }],
         description: { type: String, required: true },
         seller: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
