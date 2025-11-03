@@ -111,7 +111,165 @@ export const getChats = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+export const getSellingMessages = async (req, res) => {
+  try {
+    const currentUserId = new mongoose.Types.ObjectId(req.user?.id);
+    if (!currentUserId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    // Find messages sent by the current user
+    // Aggregate latest message per person for each ad and user
+    // Aggregate latest messages for ads where current user is the seller,
+    // and group by buyer (i.e., messages between seller and buyers for each ad)
+    const messages = await Chat.aggregate([
+      {
+      $match: {
+        // Only messages related to ads where current user is the seller
+        adId: { $in: await Ad.find({ seller: currentUserId }).distinct('_id') }
+      }
+      },
+      {
+      $sort: { createdAt: -1 }
+      },
+      {
+      $group: {
+        _id: { adId: "$adId", buyer: { $cond: [ { $eq: ["$from", currentUserId] }, "$to", "$from" ] } },
+        message: { $first: "$message" },
+        createdAt: { $first: "$createdAt" },
+        from: { $first: "$from" },
+        to: { $first: "$to" },
+        adId: { $first: "$adId" }
+      }
+      },
+      {
+      $project: {
+        adId: 1,
+        buyer: "$_id.buyer",
+        message: 1,
+        createdAt: 1,
+        from: 1,
+        to: 1,
+        _id: 0
+      }
+      }
+    ]);
+    // Populate user and ad info
+    const populatedMessages = await Chat.populate(messages, [
+      { path: "from", select: "name email" },
+      { path: "to", select: "name email" },
+      { path: "adId", model: "Ad", match: { seller: currentUserId }, select: "title seller" }
+    ]);
 
+    // Filter out messages where adId is null (i.e., ad seller is not current user)
+    const filteredMessages = populatedMessages
+      .filter(msg => msg.adId)
+      .map((msg, idx) => ({
+      id: idx + 1,
+      buyerName: (msg.to?._id?.toString() === currentUserId.toString())
+        ? (msg.from?.name || '')
+        : (msg.to?.name || ''),
+      item: msg.adId?.title || '',
+      lastMessage: msg.message,
+      time: msg.createdAt ? new Date(msg.createdAt).toLocaleString() : '',
+      avatar: msg.to?.avatar || 'https://randomuser.me/api/portraits/men/1.jpg'
+      }));
+    const count = filteredMessages.length;
+    res.json({ filteredMessages, count });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// API to fetch buying messages (messages on ads posted by others where current user initiated a conversation)
+export const getBuyingMessages = async (req, res) => {
+  try {
+    const currentUserId = new mongoose.Types.ObjectId(req.user?.id);
+    if (!currentUserId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    // Find ads NOT posted by current user
+    const otherAds = await Ad.find({ seller: { $ne: currentUserId } }).distinct('_id');
+    // Aggregate latest messages for ads where current user is the buyer (initiator)
+    const messages = await Chat.aggregate([
+      {
+        $match: {
+          adId: { $in: otherAds },
+          from: currentUserId
+        }
+      },
+      {
+        $sort: { createdAt: -1 }
+      },
+      {
+        $group: {
+          _id: { adId: "$adId", seller: "$to" },
+          message: { $first: "$message" },
+          createdAt: { $first: "$createdAt" },
+          from: { $first: "$from" },
+          to: { $first: "$to" },
+          adId: { $first: "$adId" }
+        }
+      },
+      {
+        $project: {
+          adId: 1,
+          seller: "$_id.seller",
+          message: 1,
+          createdAt: 1,
+          from: 1,
+          to: 1,
+          _id: 0
+        }
+      }
+    ]);
+    // Populate user and ad info
+    const populatedMessages = await Chat.populate(messages, [
+      { path: "from", select: "name email" },
+      { path: "to", select: "name email" },
+      { path: "adId", model: "Ad", select: "title seller" }
+    ]);
+
+    // Filter out messages where adId is null (shouldn't happen, but for safety)
+    const filteredMessages = populatedMessages
+      .filter(msg => msg.adId)
+      .map((msg, idx) => ({
+        id: idx + 1,
+        sellerName: msg.to?.name || '',
+        item: msg.adId?.title || '',
+        lastMessage: msg.message,
+        time: msg.createdAt ? new Date(msg.createdAt).toLocaleString() : '',
+        avatar: msg.to?.avatar || 'https://randomuser.me/api/portraits/men/2.jpg'
+      }));
+    const count = filteredMessages.length;
+    res.json({ filteredMessages, count });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+export const getReceivingMessages = async (req, res) => {
+  try {
+    const currentUserId = new mongoose.Types.ObjectId(req.user?.id);
+    if (!currentUserId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    // Find messages received by the current user
+    const messages = await Chat.find({
+      to: currentUserId,
+      seenAt: null
+    })
+      .populate([{ path: "from", select: "name email" }, { path: "to", select: "name email" }])
+      .sort({ createdAt: 1 });
+
+    const count = await Chat.countDocuments({
+      to: currentUserId,
+      seenAt: null
+    });
+
+    res.json({ messages, count });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+}
 export const createChat = async (req, res) => {
   try {
     const { adId, message, to, from } = req.body;
