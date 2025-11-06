@@ -165,6 +165,9 @@ export const getSellingMessages = async (req, res) => {
       .filter(msg => msg.adId)
       .map((msg, idx) => ({
       id: idx + 1,
+      adId: msg.adId?._id || '',
+      buyerId: (msg.to?._id?.toString() === msg.adId?.seller?.toString()) ? msg.from?._id?.toString() : msg.to?._id?.toString(),
+      sellerId: msg.adId?.seller?.toString() || '',
       buyerName: (msg.to?._id?.toString() === currentUserId.toString())
         ? (msg.from?.name || '')
         : (msg.to?.name || ''),
@@ -234,7 +237,11 @@ export const getBuyingMessages = async (req, res) => {
       .filter(msg => msg.adId)
       .map((msg, idx) => ({
         id: idx + 1,
+        adId: msg.adId?._id || '',
         sellerName: msg.to?.name || '',
+
+        buyerId: (msg.to?._id?.toString() === msg.adId?.seller?.toString()) ? msg.from?._id?.toString() : msg.to?._id?.toString(),
+        sellerId: msg.adId?.seller?.toString() || '',
         item: msg.adId?.title || '',
         lastMessage: msg.message,
         time: msg.createdAt ? new Date(msg.createdAt).toLocaleString() : '',
