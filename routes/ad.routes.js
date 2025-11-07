@@ -7,7 +7,7 @@ const router = express.Router();
 
 router.get("/listCategories", getAllAdCategories);
 router.post("/listUserAds", getUserAds);
-router.post("/", getAllAds);
+router.post("/", authMiddleware, getAllAds);
 router.post("/postAdd", authMiddleware, fileUpload.array('images'), createAd);
 router.get("/chat", getChats);
 router.get("/:id", getAdById);

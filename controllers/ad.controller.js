@@ -87,24 +87,25 @@ export const getUserMessages = async (req, res) => {
 };
 export const getChats = async (req, res) => {
   try {
-    const { adId, userId } = req.query;
-    if (!adId || !userId) {
-      return res.status(400).json({ message: "adId and userId are required" });
+    const { adId, buyerId, sellerId } = req.query;
+    if (!adId || !buyerId || !sellerId) {
+      return res.status(400).json({ message: "adId, buyerId, and sellerId are required" });
     }
-    console.log("Fetching chats for adId:", adId, "and userId:", userId);
+    console.log("Fetching chats for adId:", adId, "and buyerId:", buyerId, "and sellerId:", sellerId);
     // Convert adId and userId to ObjectId
-    let adObjectId, userObjectId;
+    let adObjectId, buyerObjectId, sellerObjectId;
     try {
       adObjectId = new mongoose.Types.ObjectId(adId);
-      userObjectId = new mongoose.Types.ObjectId(userId);
-      console.log("Converted adId and userId to ObjectId:", adObjectId, userObjectId);
+      buyerObjectId = new mongoose.Types.ObjectId(buyerId);
+      sellerObjectId = new mongoose.Types.ObjectId(sellerId);
+      console.log("Converted adId and userId to ObjectId:", adObjectId, buyerObjectId, sellerObjectId);
     } catch (e) {
       return res.status(400).json({ message: "Invalid adId or userId format" });
     }
     // Find chats for this ad where user is either sender or receiver
     const chats = await Chat.find({
       adId: adObjectId,
-      $or: [ { to: userObjectId }, { from: userObjectId } ]
+      $or: [ { to: buyerObjectId }, { from: sellerObjectId }, { from: buyerObjectId, to: sellerObjectId } ]
     }).populate([{ path: "from", select: "name email" }, { path: "to", select: "name email" }]).sort({ createdAt: 1 });
     res.json(chats);
   } catch (err) {
@@ -253,30 +254,7 @@ export const getBuyingMessages = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
-export const getReceivingMessages = async (req, res) => {
-  try {
-    const currentUserId = new mongoose.Types.ObjectId(req.user?.id);
-    if (!currentUserId) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-    // Find messages received by the current user
-    const messages = await Chat.find({
-      to: currentUserId,
-      seenAt: null
-    })
-      .populate([{ path: "from", select: "name email" }, { path: "to", select: "name email" }])
-      .sort({ createdAt: 1 });
 
-    const count = await Chat.countDocuments({
-      to: currentUserId,
-      seenAt: null
-    });
-
-    res.json({ messages, count });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-}
 export const createChat = async (req, res) => {
   try {
     const { adId, message, to, from } = req.body;
@@ -341,22 +319,63 @@ export const createAd = async (req, res) => {
 
 export const getAllAds = async (req, res) => {
   try {
-    console.log("Fetching ads for userId:", req.params.userId);
-    let ads = []
-     ads = await Ad.find().populate([{ path: "seller", select: "name email" }, { path: "category", select: "name description" }]).sort({ createdAt: -1 });
+    // Pagination params
+    const page = parseInt(req.body.page, 10) || 1;
+    const limit = parseInt(req.body.limit, 10) || 10;
+    const skip = (page - 1) * limit;
+    const searchQuery = req.body.search || '';
 
-    res.json(ads);
+    // Total count for pagination
+    const total = await Ad.countDocuments({ title: { $regex: searchQuery, $options: 'i' } });
+
+    // Fetch paginated ads
+    const ads = await Ad.find({ title: { $regex: searchQuery, $options: 'i' } ,seller: { $ne: req.user?.id } })
+      .populate([
+        { path: "seller", select: "name email" },
+        { path: "category", select: "name description" }
+      ])
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    res.json({
+      ads,
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit)
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 export const getUserAds = async (req, res) => {
   try {
-    let userId = req.body.id;
-    console.log("Fetching ads for userId:", req.params.id);
-    let ads = []
-     ads = await Ad.find({ seller: userId }).populate([{ path: "seller", select: "name email" }, { path: "category", select: "name description" }]).sort({ createdAt: -1 });
-    res.json(ads);
+    const userId = req.body.id;
+    const page = parseInt(req.body.page, 10) || 1;
+    const limit = parseInt(req.body.limit, 10) || 10;
+    const skip = (page - 1) * limit;
+
+    // Total count for pagination
+    const total = await Ad.countDocuments({ seller: userId });
+
+    // Fetch paginated ads for user
+    const ads = await Ad.find({ seller: userId })
+      .populate([
+        { path: "seller", select: "name email" },
+        { path: "category", select: "name description" }
+      ])
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    res.json({
+      ads,
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit)
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
