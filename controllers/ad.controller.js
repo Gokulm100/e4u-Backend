@@ -1,7 +1,7 @@
 import Chat from "../models/chat.model.js";
 import Ad from "../models/ad.model.js";
 import AdCategory from "../models/ad.category.model.js";
-
+import {analyzeDescription} from "../aiAnalyzer/aiAnalyzer.js";
 
 import mongoose from "mongoose";
 
@@ -438,5 +438,51 @@ export const deleteAd = async (req, res) => {
     res.json({ message: "Ad deleted successfully" });
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+};
+export const summarizeAdUsingAi = async (req, res) => {
+  try {
+    const { adTitle, category, subCategory, description } = req.body;
+
+    // Validation
+    if (!description || !category) {
+      return res.status(400).json({
+        success: false,
+        error: 'Description and category are required'
+      });
+    }
+
+    if (description.length < 20) {
+      return res.status(400).json({
+        success: false,
+        error: 'Description is too short for analysis'
+      });
+    }
+
+    // Generate AI summary
+    console.log('🤖 Analyzing description...');
+
+    const aiSummary = await analyzeDescription({
+      adTitle,
+      category,
+      subCategory,
+      description
+    });
+
+    console.log('✅ AI summary generated successfully');
+
+    return res.json({
+      success: true,
+      data: aiSummary
+    });
+
+  } catch (error) {
+    console.error('❌ Error:', error);
+    
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to generate AI summary',
+      message: error.message
+    });
   }
 };
