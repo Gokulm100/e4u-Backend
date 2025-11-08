@@ -324,17 +324,43 @@ export const getAllAds = async (req, res) => {
     const limit = parseInt(req.body.limit, 10) || 10;
     const skip = (page - 1) * limit;
     const searchQuery = req.body.search || '';
+    const categoryName = req.body.category || null;
+    const subCategory = req.body.subCategory || null;
 
-    // Total count for pagination
-    const total = await Ad.countDocuments({ title: { $regex: searchQuery, $options: 'i' } });
+    // Resolve category name to ObjectId if provided
+    let categoryId = null;
+    if (categoryName) {
+      const categoryDoc = await AdCategory.findOne({ name: categoryName });
+      if (categoryDoc) {
+        categoryId = categoryDoc._id;
+      }
+    }
 
-    // Fetch paginated ads
-    const ads = await Ad.find({ title: { $regex: searchQuery, $options: 'i' } ,seller: { $ne: req.user?.id } })
+    // Build filter
+    const filter = {
+      title: { $regex: searchQuery, $options: 'i' }
+    };
+    if (categoryId) {
+      filter.category = categoryId;
+    }
+    if (subCategory) {
+      filter.subCategory = subCategory;
+    }
+    // Add seller filter if user is authenticated
+    if (req.user?.id) {
+      filter.seller = { $ne: req.user.id };
+    }
+
+    // Total count with same filter
+    const total = await Ad.countDocuments(filter);
+
+    // Fetch paginated ads with same filter
+    const ads = await Ad.find(filter)
       .populate([
         { path: "seller", select: "name email" },
         { path: "category", select: "name description" }
       ])
-      .sort({ createdAt: -1 })
+      .sort({ createdAt: -1, _id: -1 })
       .skip(skip)
       .limit(limit);
 
