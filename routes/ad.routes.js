@@ -1,5 +1,5 @@
 import express from "express";
-import { getLatestMessages,createAd, getAllAds, getAdById, deleteAd,getAllAdCategories,getUserAds,editAd,createChat,getChats,getUserMessages,getBuyingMessages,getSellingMessages,summarizeAdUsingAi } from "../controllers/ad.controller.js";
+import { getLatestMessages,createAd, getAllAds, getAdById, deleteAd,getAllAdCategories,getUserAds,editAd,createChat,getChats,getUserMessages,getBuyingMessages,getSellingMessages,summarizeAdUsingAi ,markMessagesAsSeen} from "../controllers/ad.controller.js";
 import authMiddleware from "../middleware/auth.js";
 import fileUpload from "../middleware/fileUpload.js";
 
@@ -19,6 +19,7 @@ router.post("/getUserMessages", authMiddleware, getUserMessages);
 router.post("/getSellingMessages", authMiddleware, getSellingMessages);
 router.post("/getBuyingMessages", authMiddleware, getBuyingMessages);
 router.post("/summarizeAdUsingAi", summarizeAdUsingAi);
+router.post("/markMessagesAsSeen", authMiddleware, markMessagesAsSeen);
 
 
 

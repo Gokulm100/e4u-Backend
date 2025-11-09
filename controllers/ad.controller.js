@@ -66,21 +66,46 @@ export const getUserMessages = async (req, res) => {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
+    // Aggregate to get the latest unseen message from each sender to the current user
+    const latestMessages = await Chat.aggregate([
+      {
+        $match: {
+          to: currentUserId,
+          seenAt: null
+        }
+      },
+      { $sort: { createdAt: -1 } },
+      {
+        $group: {
+          _id: "$from",
+          message: { $first: "$message" },
+          createdAt: { $first: "$createdAt" },
+          from: { $first: "$from" },
+          to: { $first: "$to" },
+          adId: { $first: "$adId" },
+          seenAt: { $first: "$seenAt" }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          from: 1,
+          to: 1,
+          adId: 1,
+          message: 1,
+          createdAt: 1,
+          seenAt: 1
+        }
+      }
+    ]);
 
-    // Find messages between the two users for the specified ad
-    const messages = await Chat.find({
-      to: currentUserId,
-      seenAt: null
-    })
-      .populate([{ path: "from", select: "name email" }, { path: "to", select: "name email" }])
-      .sort({ createdAt: 1 });
+    // Populate user info
+    const populated = await Chat.populate(latestMessages, [
+      { path: "from", select: "name email" },
+      { path: "to", select: "name email" }
+    ]);
 
-    const count = await Chat.countDocuments({
-      to: currentUserId,
-      seenAt: null
-    });
-
-    res.json({ messages, count });
+    res.json({ messages: populated, count: populated.length });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -91,22 +116,30 @@ export const getChats = async (req, res) => {
     if (!adId || !buyerId || !sellerId) {
       return res.status(400).json({ message: "adId, buyerId, and sellerId are required" });
     }
-    console.log("Fetching chats for adId:", adId, "and buyerId:", buyerId, "and sellerId:", sellerId);
-    // Convert adId and userId to ObjectId
+    
     let adObjectId, buyerObjectId, sellerObjectId;
     try {
       adObjectId = new mongoose.Types.ObjectId(adId);
       buyerObjectId = new mongoose.Types.ObjectId(buyerId);
       sellerObjectId = new mongoose.Types.ObjectId(sellerId);
-      console.log("Converted adId and userId to ObjectId:", adObjectId, buyerObjectId, sellerObjectId);
     } catch (e) {
       return res.status(400).json({ message: "Invalid adId or userId format" });
     }
-    // Find chats for this ad where user is either sender or receiver
+    
+    // Find chats between buyer and seller for this specific ad
     const chats = await Chat.find({
       adId: adObjectId,
-      $or: [ { to: buyerObjectId }, { from: sellerObjectId }, { from: buyerObjectId, to: sellerObjectId } ]
-    }).populate([{ path: "from", select: "name email" }, { path: "to", select: "name email" }]).sort({ createdAt: 1 });
+      $or: [
+        { from: buyerObjectId, to: sellerObjectId },
+        { from: sellerObjectId, to: buyerObjectId }
+      ]
+    })
+    .populate([
+      { path: "from", select: "name email" },
+      { path: "to", select: "name email" }
+    ])
+    .sort({ createdAt: 1 });
+    
     res.json(chats);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -196,34 +229,46 @@ export const getBuyingMessages = async (req, res) => {
     // Aggregate latest messages for ads where current user is the buyer (initiator)
     const messages = await Chat.aggregate([
       {
-        $match: {
-          adId: { $in: otherAds },
-          from: currentUserId
-        }
+      $match: {
+        adId: { $in: otherAds },
+        $or: [
+        { from: currentUserId },
+        { to: currentUserId }
+        ]
+      }
       },
       {
-        $sort: { createdAt: -1 }
+      $sort: { createdAt: -1 }
       },
       {
-        $group: {
-          _id: { adId: "$adId", seller: "$to" },
-          message: { $first: "$message" },
-          createdAt: { $first: "$createdAt" },
-          from: { $first: "$from" },
-          to: { $first: "$to" },
-          adId: { $first: "$adId" }
+      $group: {
+        _id: {
+        adId: "$adId",
+        seller: {
+          $cond: [
+          { $eq: ["$from", currentUserId] },
+          "$to",
+          "$from"
+          ]
         }
+        },
+        message: { $first: "$message" },
+        createdAt: { $first: "$createdAt" },
+        from: { $first: "$from" },
+        to: { $first: "$to" },
+        adId: { $first: "$adId" }
+      }
       },
       {
-        $project: {
-          adId: 1,
-          seller: "$_id.seller",
-          message: 1,
-          createdAt: 1,
-          from: 1,
-          to: 1,
-          _id: 0
-        }
+      $project: {
+        adId: 1,
+        seller: "$_id.seller",
+        message: 1,
+        createdAt: 1,
+        from: 1,
+        to: 1,
+        _id: 0
+      }
       }
     ]);
     // Populate user and ad info
@@ -484,5 +529,36 @@ export const summarizeAdUsingAi = async (req, res) => {
       error: 'Failed to generate AI summary',
       message: error.message
     });
+  }
+};
+export const markMessagesAsSeen = async (req, res) => {
+  try {
+    const currentUserId = new mongoose.Types.ObjectId(req.user?.id);
+    if (!currentUserId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    console.log("Marking messages as seen for user:", req.user);
+    const { adId, reader, sender } = req.body;
+    if (!adId) {
+      return res.status(400).json({ message: "adId is required" });
+    }
+        if (reader == sender) {
+      return res.status(400).json({ message: "Reader and sender cannot be the same" });
+    }
+    // Update messages to set seenAt timestamp
+    const result = await Chat.updateMany(
+      { from: sender,
+        to: reader,
+        adId: new mongoose.Types.ObjectId(adId)
+      },
+      {
+        $set: { seenAt: new Date() }
+      }
+    );
+
+    return res.json({ message: "Messages marked as seen", result });
+  } catch (error) {
+    console.error("Error marking messages as seen:", error);
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
