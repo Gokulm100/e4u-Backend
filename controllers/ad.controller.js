@@ -307,6 +307,17 @@ export const createChat = async (req, res) => {
       return res.status(400).json({ message: "Missing required fields" });
     }
     const chat = await Chat.create({ adId, message, to, from });
+    if(chat) {
+      // Add current user to usersInterested array in Ad if not already present
+      // Only add to usersInterested if the sender is not the seller
+      const ad = await Ad.findById(adId);
+      if (ad && ad.seller.toString() !== from.toString()) {
+        await Ad.updateOne(
+          { _id: adId },
+          { $addToSet: { usersInterested: from } }
+        );
+      }
+    }
     res.status(201).json(chat);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -371,6 +382,8 @@ export const getAllAds = async (req, res) => {
     const searchQuery = req.body.search || '';
     const categoryName = req.body.category || null;
     const subCategory = req.body.subCategory || null;
+    const userId = req.body?.userId || null;
+    console.log(userId)
 
     // Resolve category name to ObjectId if provided
     let categoryId = null;
@@ -392,9 +405,11 @@ export const getAllAds = async (req, res) => {
       filter.subCategory = subCategory;
     }
     // Add seller filter if user is authenticated
-    if (req.user?.id) {
-      filter.seller = { $ne: req.user.id };
+    if (userId) {
+      filter.seller = { $ne: userId };
     }
+    filter.isSold = false;
+    filter.isActive = true;
 
     // Total count with same filter
     const total = await Ad.countDocuments(filter);
@@ -562,3 +577,101 @@ export const markMessagesAsSeen = async (req, res) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
+export const incrementViews = async (req, res) => {
+  try {
+    const { adId } = req.body;
+    if (!adId) {
+      return res.status(400).json({ message: "adId is required" });
+    }
+    const ad = await Ad.findById(adId);
+    if (!ad) {
+      return res.status(404).json({ message: "Ad not found" });
+    }
+    ad.views = (ad.views || 0) + 1;
+    await ad.save();
+    return res.json({ message: "View count incremented", views: ad.views });
+  } catch (error) {
+    console.error("Error counting views:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
+export const getUsersInterestedInAd = async (req, res) => {
+  try {
+    const { adId } = req.body;
+    if (!adId) {
+      return res.status(400).json({ message: "adId is required" });
+    }
+
+    const ad = await Ad.findById(adId).populate([{ path: "usersInterested", select: "name email" }]);
+    const users = ad ? ad.usersInterested : [];
+
+    res.json({ users });
+  } catch (err) {
+    console.error("Error fetching interested users:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+export const markAdAsSold = async (req, res) => {
+  try {
+    const { adId, buyerId } = req.body;
+    if (!adId ) {
+      return res.status(400).json({ message: "adId is required" });
+    }
+
+    const ad = await Ad.findById(adId);
+    if (!ad) {
+      return res.status(404).json({ message: "Ad not found" });
+    }
+
+    ad.isSold = true;
+    ad.soldTo = buyerId || null;
+    await ad.save();
+
+    return res.json({ message: "Success" });
+  } catch (error) {
+    console.error("Error marking ad as sold:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
+export const disableAd = async (req, res) => {
+  try {
+    const { adId } = req.body;
+    if (!adId ) {
+      return res.status(400).json({ message: "adId is required" });
+    }
+
+    const ad = await Ad.findById(adId);
+    if (!ad) {
+      return res.status(404).json({ message: "Ad not found" });
+    }
+
+    ad.isActive = false;
+    await ad.save();
+
+    return res.json({ message: "Ad disabled successfully" });
+  } catch (error) {
+    console.error("Error disabling ad:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
+export const enableAd = async (req, res) => {
+  try {
+    const { adId } = req.body;
+    if (!adId ) {
+      return res.status(400).json({ message: "adId is required" });
+    }
+
+    const ad = await Ad.findById(adId);
+    if (!ad) {
+      return res.status(404).json({ message: "Ad not found" });
+    }
+
+    ad.isActive = true;
+    await ad.save();
+
+    return res.json({ message: "Ad enabled successfully" });
+  } catch (error) {
+    console.error("Error enabling ad:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}

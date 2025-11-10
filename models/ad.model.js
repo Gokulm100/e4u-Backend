@@ -10,7 +10,12 @@ const adSchema = new mongoose.Schema(
         images: [{ type: String, required: true }],
         description: { type: String, required: true },
         seller: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-        posted: { type: Date, required: true, default: Date.now }
+        posted: { type: Date, required: true, default: Date.now },
+        usersInterested: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+        views: { type: Number, default: 0 },
+        isActive: { type: Boolean, default: true },
+        isSold: { type: Boolean, default: false },
+        soldTo: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     },
     { timestamps: true }
 );
