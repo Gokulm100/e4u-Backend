@@ -7,6 +7,7 @@ import cors from "cors";
 import connectDB from "./config/db.js";
 import userRoutes from "./routes/user.routes.js";
 import adRoutes from "./routes/ad.routes.js";
+import aiRoutes from "./routes/ai.routes.js";
 
 dotenv.config();
 connectDB();
@@ -28,6 +29,7 @@ app.use((req, res, next) => {
 
 app.use("/api/users", userRoutes);
 app.use("/api/ads", adRoutes);
+app.use("/api/ai", aiRoutes);
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
