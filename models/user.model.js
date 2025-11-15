@@ -27,6 +27,9 @@ const userSchema = new mongoose.Schema(
     lastLogin: {
       type: Date,
     },
+    fcmToken: {
+      type: String,
+    },
   },
   { versionKey: false }
 );

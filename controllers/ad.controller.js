@@ -1,9 +1,9 @@
 import Chat from "../models/chat.model.js";
 import Ad from "../models/ad.model.js";
+import User from "../models/user.model.js";
 import AdCategory from "../models/ad.category.model.js";
 import {analyzeDescription} from "../aiAnalyzer/aiAnalyzer.js";
-
-import mongoose from "mongoose";
+import { sendChatNotification } from "../services/pushService.js";import mongoose from "mongoose";
 
 
 export const getLatestMessages = async (req, res) => {
@@ -308,6 +308,8 @@ export const createChat = async (req, res) => {
     }
     const chat = await Chat.create({ adId, message, to, from });
     if(chat) {
+      let fromUser = await User.findById(from);
+      let fromName = fromUser ? fromUser.name : 'Someone';
       // Add current user to usersInterested array in Ad if not already present
       // Only add to usersInterested if the sender is not the seller
       const ad = await Ad.findById(adId);
@@ -316,6 +318,15 @@ export const createChat = async (req, res) => {
           { _id: adId },
           { $addToSet: { usersInterested: from } }
         );
+      }
+      // Send push notification to recipient
+      try {
+       const receiver = await User.findById(to);
+       if (receiver && receiver.fcmToken) {
+         await sendChatNotification(receiver.fcmToken, message,fromName);
+       }
+      } catch (notifyErr) {
+        console.error('Push notification error:', notifyErr);
       }
     }
     res.status(201).json(chat);

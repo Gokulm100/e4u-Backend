@@ -5,9 +5,11 @@ import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import connectDB from "./config/db.js";
+
 import userRoutes from "./routes/user.routes.js";
 import adRoutes from "./routes/ad.routes.js";
 import aiRoutes from "./routes/ai.routes.js";
+
 
 dotenv.config();
 connectDB();
@@ -26,6 +28,7 @@ app.use((req, res, next) => {
 	console.log(`[${req.method}] ${req.originalUrl} - Body:`, req.body);
 	next();
 });
+
 
 app.use("/api/users", userRoutes);
 app.use("/api/ads", adRoutes);
