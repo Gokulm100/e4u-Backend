@@ -1,4 +1,6 @@
 import User from "../models/user.model.js";
+import ConsentVersion from "../models/consentVersion.model.js";
+import Consent from "../models/consent.model.js";
 import { OAuth2Client } from "google-auth-library";
 import jwt from "jsonwebtoken";
 
@@ -46,9 +48,9 @@ export const loginUser = async (req, res) => {
       user.lastLogin = new Date();
       await user.save();
     }
-
+    console.log("User logged in:", user);
     // Generate JWT for your app
-    const appToken = jwt.sign({ id: user._id, email: user.email }, process.env.JWT_SECRET, {
+    const appToken = jwt.sign({ id: user._id, email: user.email, name: user.name }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
 
@@ -78,6 +80,59 @@ export const saveFcmToken = async (req, res) => {
     await user.save();
 
     res.json({ message: "FCM token saved successfully" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+export const getLatestConsentVersion = async (req, res) => {
+  try {
+    let latestVersionDoc = await ConsentVersion.findOne().sort({ version: -1 });
+    if (!latestVersionDoc) {
+      return res.status(404).json({ message: "No consent versions found" });
+    }
+    const data = {privacyNotice: latestVersionDoc.privacyNotice,termsOfService: latestVersionDoc.termsOfService,version: latestVersionDoc.version};
+    res.json({ data });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+export const acceptConsent = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { version } = req.body;
+
+    if (!version) {
+      return res.status(400).json({ message: "Consent version is required" });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    user.consentVersion = version;
+    await user.save();
+
+    res.json({ message: "Consent accepted successfully" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+export const revokeConsent = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    user.consentVersion = null; // Or set to a specific value indicating revocation
+    await user.save();
+
+    res.json({ message: "Consent revoked successfully" });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

@@ -14,7 +14,7 @@ export async function sendChatNotification(toFcmToken, messageText, senderName) 
     const message = {
         token: toFcmToken,
         notification: {
-            title: `New message from ${senderName}`,
+            title: `${senderName}`,
             body: messageText,
         },
         data: {

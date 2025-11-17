@@ -170,6 +170,7 @@ export const getSellingMessages = async (req, res) => {
         _id: { adId: "$adId", buyer: { $cond: [ { $eq: ["$from", currentUserId] }, "$to", "$from" ] } },
         message: { $first: "$message" },
         createdAt: { $first: "$createdAt" },
+        seenAt: { $first: "$seenAt" },
         from: { $first: "$from" },
         to: { $first: "$to" },
         adId: { $first: "$adId" }
@@ -181,19 +182,20 @@ export const getSellingMessages = async (req, res) => {
         buyer: "$_id.buyer",
         message: 1,
         createdAt: 1,
+        seenAt: 1,
         from: 1,
         to: 1,
         _id: 0
       }
       }
     ]);
+    console.log(messages)
     // Populate user and ad info
     const populatedMessages = await Chat.populate(messages, [
       { path: "from", select: "name email" },
       { path: "to", select: "name email" },
       { path: "adId", model: "Ad", match: { seller: currentUserId }, select: "title seller" }
     ]);
-
     // Filter out messages where adId is null (i.e., ad seller is not current user)
     const filteredMessages = populatedMessages
       .filter(msg => msg.adId)
@@ -207,6 +209,9 @@ export const getSellingMessages = async (req, res) => {
         : (msg.to?.name || ''),
       item: msg.adId?.title || '',
       lastMessage: msg.message,
+      isSeen: msg.seenAt ? true : false,
+      lastMessageFrom: msg.from?._id?.toString(),
+      seenAt: msg.seenAt ? new Date(msg.seenAt).toLocaleString() : '',
       time: msg.createdAt ? new Date(msg.createdAt).toLocaleString() : '',
       avatar: msg.to?.avatar || 'https://randomuser.me/api/portraits/men/1.jpg'
       }));
@@ -254,6 +259,7 @@ export const getBuyingMessages = async (req, res) => {
         },
         message: { $first: "$message" },
         createdAt: { $first: "$createdAt" },
+        seenAt: { $first: "$seenAt" },
         from: { $first: "$from" },
         to: { $first: "$to" },
         adId: { $first: "$adId" }
@@ -265,6 +271,7 @@ export const getBuyingMessages = async (req, res) => {
         seller: "$_id.seller",
         message: 1,
         createdAt: 1,
+        seenAt: 1,
         from: 1,
         to: 1,
         _id: 0
@@ -285,11 +292,17 @@ export const getBuyingMessages = async (req, res) => {
         id: idx + 1,
         adId: msg.adId?._id || '',
         sellerName: msg.to?.name || '',
+        lastMessageFrom: msg.from?._id?.toString(),
+        buyerName: (msg.to?._id?.toString() === currentUserId.toString())
+          ? (msg.from?.name || '')
+          : (msg.to?.name || ''),
 
         buyerId: (msg.to?._id?.toString() === msg.adId?.seller?.toString()) ? msg.from?._id?.toString() : msg.to?._id?.toString(),
         sellerId: msg.adId?.seller?.toString() || '',
         item: msg.adId?.title || '',
         lastMessage: msg.message,
+        isSeen: msg.seenAt ? true : false,
+        seenAt: msg.seenAt ? new Date(msg.seenAt).toLocaleString() : '',
         time: msg.createdAt ? new Date(msg.createdAt).toLocaleString() : '',
         avatar: msg.to?.avatar || 'https://randomuser.me/api/portraits/men/2.jpg'
       }));
@@ -306,29 +319,28 @@ export const createChat = async (req, res) => {
     if (!adId || !message || !to || !from) {
       return res.status(400).json({ message: "Missing required fields" });
     }
+
+    // Create chat message
     const chat = await Chat.create({ adId, message, to, from });
-    if(chat) {
-      let fromUser = await User.findById(from);
-      let fromName = fromUser ? fromUser.name : 'Someone';
-      // Add current user to usersInterested array in Ad if not already present
-      // Only add to usersInterested if the sender is not the seller
-      const ad = await Ad.findById(adId);
-      if (ad && ad.seller.toString() !== from.toString()) {
-        await Ad.updateOne(
-          { _id: adId },
-          { $addToSet: { usersInterested: from } }
-        );
-      }
-      // Send push notification to recipient
-      try {
-       const receiver = await User.findById(to);
-       if (receiver && receiver.fcmToken) {
-         await sendChatNotification(receiver.fcmToken, message,fromName);
-       }
-      } catch (notifyErr) {
-        console.error('Push notification error:', notifyErr);
+
+    // Add sender to usersInterested if not the seller
+    const ad = await Ad.findById(adId).select("seller usersInterested");
+    if (ad && ad.seller.toString() !== from.toString()) {
+      if (!ad.usersInterested.includes(from)) {
+        ad.usersInterested.push(from);
+        await ad.save();
       }
     }
+
+    // Send push notification to recipient if possible
+    User.findById(to).select("fcmToken").then(receiver => {
+      if (receiver?.fcmToken) {
+        console.log(req.user)
+        const fromName = req.user?.name || "Someone";
+        sendChatNotification(receiver.fcmToken, message, fromName).catch(console.error);
+      }
+    }).catch(console.error);
+
     res.status(201).json(chat);
   } catch (err) {
     res.status(500).json({ message: err.message });

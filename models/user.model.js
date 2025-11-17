@@ -30,6 +30,10 @@ const userSchema = new mongoose.Schema(
     fcmToken: {
       type: String,
     },
+    isConsented: {
+      type: Boolean,
+      default: false,
+    },
   },
   { versionKey: false }
 );

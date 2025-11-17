@@ -13,7 +13,7 @@ router.get("/chat", getChats);
 router.get("/:id", getAdById);
 router.delete("/:id", authMiddleware, deleteAd);
 router.put("/edit/:id", authMiddleware, fileUpload.array('images'), editAd);
-router.post("/chat", createChat);
+router.post("/chat",authMiddleware, createChat);
 router.post("/latestMessages", authMiddleware, getLatestMessages);
 router.post("/getUserMessages", authMiddleware, getUserMessages);
 router.post("/getSellingMessages", authMiddleware, getSellingMessages);
