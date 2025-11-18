@@ -155,15 +155,17 @@ export const getSellingMessages = async (req, res) => {
     // Aggregate latest message per person for each ad and user
     // Aggregate latest messages for ads where current user is the seller,
     // and group by buyer (i.e., messages between seller and buyers for each ad)
+    // Get all ad IDs where current user is the seller
+    const adIds = await Ad.find({ seller: currentUserId }).distinct('_id');
+
     const messages = await Chat.aggregate([
       {
       $match: {
-        // Only messages related to ads where current user is the seller
-        adId: { $in: await Ad.find({ seller: currentUserId }).distinct('_id') }
+        adId: { $in: adIds }
       }
       },
       {
-      $sort: { createdAt: -1 }
+      $sort: { createdAt: -1, _id: -1 } // Ensure deterministic sort
       },
       {
       $group: {
@@ -187,15 +189,21 @@ export const getSellingMessages = async (req, res) => {
         to: 1,
         _id: 0
       }
+      },
+      {
+      $sort: { createdAt: -1, adId: 1, buyer: 1 } // Final sort for consistent order
       }
     ]);
-    console.log(messages)
+    // console.log(messages)
+    // res.json({ messages, count: messages.length });
+
     // Populate user and ad info
     const populatedMessages = await Chat.populate(messages, [
       { path: "from", select: "name email" },
       { path: "to", select: "name email" },
       { path: "adId", model: "Ad", match: { seller: currentUserId }, select: "title seller" }
     ]);
+    console.log("populatedMessages", populatedMessages)
     // Filter out messages where adId is null (i.e., ad seller is not current user)
     const filteredMessages = populatedMessages
       .filter(msg => msg.adId)
