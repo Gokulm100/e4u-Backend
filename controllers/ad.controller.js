@@ -207,22 +207,27 @@ export const getSellingMessages = async (req, res) => {
     // Filter out messages where adId is null (i.e., ad seller is not current user)
     const filteredMessages = populatedMessages
       .filter(msg => msg.adId)
-      .map((msg, idx) => ({
-      id: idx + 1,
-      adId: msg.adId?._id || '',
-      buyerId: (msg.to?._id?.toString() === msg.adId?.seller?.toString()) ? msg.from?._id?.toString() : msg.to?._id?.toString(),
-      sellerId: msg.adId?.seller?.toString() || '',
-      buyerName: (msg.to?._id?.toString() === currentUserId.toString())
+      .map((msg, idx) => {
+      // Helper to format date as "18 JAN 2025 10:02 AM"
+    
+
+      return {
+        id: idx + 1,
+        adId: msg.adId?._id || '',
+        buyerId: (msg.to?._id?.toString() === msg.adId?.seller?.toString()) ? msg.from?._id?.toString() : msg.to?._id?.toString(),
+        sellerId: msg.adId?.seller?.toString() || '',
+        buyerName: (msg.to?._id?.toString() === currentUserId.toString())
         ? (msg.from?.name || '')
         : (msg.to?.name || ''),
-      item: msg.adId?.title || '',
-      lastMessage: msg.message,
-      isSeen: msg.seenAt ? true : false,
-      lastMessageFrom: msg.from?._id?.toString(),
-      seenAt: msg.seenAt ? new Date(msg.seenAt).toLocaleString() : '',
-      time: msg.createdAt ? new Date(msg.createdAt).toLocaleString() : '',
-      avatar: msg.to?.avatar || 'https://randomuser.me/api/portraits/men/1.jpg'
-      }));
+        item: msg.adId?.title || '',
+        lastMessage: msg.message,
+        isSeen: msg.seenAt ? true : false,
+        lastMessageFrom: msg.from?._id?.toString(),
+        seenAt: msg.seenAt ? formatDate(msg.seenAt) : '',
+        time: msg.createdAt ? formatDate(msg.createdAt) : '',
+        avatar: msg.to?.avatar || 'https://randomuser.me/api/portraits/men/1.jpg'
+      };
+      });
     const count = filteredMessages.length;
     res.json({ filteredMessages, count });
   } catch (err) {
@@ -310,8 +315,8 @@ export const getBuyingMessages = async (req, res) => {
         item: msg.adId?.title || '',
         lastMessage: msg.message,
         isSeen: msg.seenAt ? true : false,
-        seenAt: msg.seenAt ? new Date(msg.seenAt).toLocaleString() : '',
-        time: msg.createdAt ? new Date(msg.createdAt).toLocaleString() : '',
+        seenAt: msg.seenAt ? formatDate(msg.seenAt) : '',
+        time: msg.createdAt ? formatDate(msg.createdAt) : '',
         avatar: msg.to?.avatar || 'https://randomuser.me/api/portraits/men/2.jpg'
       }));
     const count = filteredMessages.length;
@@ -706,3 +711,27 @@ export const enableAd = async (req, res) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 }
+  const formatDate = (date) => {
+        if (!date) return '';
+        const d = new Date(date);
+        const now = new Date();
+        const isToday = d.toDateString() === now.toDateString();
+        const yesterday = new Date(now);
+        yesterday.setDate(now.getDate() - 1);
+        const isYesterday = d.toDateString() === yesterday.toDateString();
+
+        let hours = d.getHours();
+        const minutes = d.getMinutes().toString().padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12;
+        const timeStr = `${hours}:${minutes} ${ampm}`;
+
+        if (isToday) return `Today ${timeStr}`;
+        if (isYesterday) return `Yesterday ${timeStr}`;
+
+        const day = d.getDate().toString().padStart(2, '0');
+        const month = d.toLocaleString('en-US', { month: 'short' }).toUpperCase();
+        const year = d.getFullYear();
+        return `${day} ${month} ${year} ${timeStr}`;
+      };
