@@ -2,8 +2,9 @@ import Chat from "../models/chat.model.js";
 import Ad from "../models/ad.model.js";
 import User from "../models/user.model.js";
 import AdCategory from "../models/ad.category.model.js";
-import {analyzeDescription} from "../aiAnalyzer/aiAnalyzer.js";
-import { sendChatNotification } from "../services/pushService.js";import mongoose from "mongoose";
+import {analyzeDescription,aiSearchAds} from "../aiAnalyzer/aiAnalyzer.js";
+import { sendChatNotification } from "../services/pushService.js";
+import mongoose from "mongoose";
 
 
 export const getLatestMessages = async (req, res) => {
@@ -419,8 +420,9 @@ export const getAllAds = async (req, res) => {
     const categoryName = req.body.category || null;
     const subCategory = req.body.subCategory || null;
     const userId = req.body?.userId || null;
+    const aiSearch = req.body?.aiSearch || false;
     console.log(userId)
-
+    let filter = {};
     // Resolve category name to ObjectId if provided
     let categoryId = null;
     if (categoryName) {
@@ -429,11 +431,13 @@ export const getAllAds = async (req, res) => {
         categoryId = categoryDoc._id;
       }
     }
+    if(!aiSearch){
+        // Build filter
+        filter = {
+          title: { $regex: searchQuery, $options: 'i' }
+        };
+    }
 
-    // Build filter
-    const filter = {
-      title: { $regex: searchQuery, $options: 'i' }
-    };
     if (categoryId) {
       filter.category = categoryId;
     }
@@ -446,12 +450,20 @@ export const getAllAds = async (req, res) => {
     }
     filter.isSold = false;
     filter.isActive = true;
-
     // Total count with same filter
     const total = await Ad.countDocuments(filter);
 
     // Fetch paginated ads with same filter
-    const ads = await Ad.find(filter)
+    let ads;
+    if (aiSearch) {
+      ads = await Ad.find(filter)
+      .populate([
+        { path: "seller", select: "name email" },
+        { path: "category", select: "name description" }
+      ])
+      .sort({ createdAt: -1, _id: -1 });
+    } else {
+      ads = await Ad.find(filter)
       .populate([
         { path: "seller", select: "name email" },
         { path: "category", select: "name description" }
@@ -459,14 +471,46 @@ export const getAllAds = async (req, res) => {
       .sort({ createdAt: -1, _id: -1 })
       .skip(skip)
       .limit(limit);
+    }
+      console.log("Ads fetched:", ads.length);
+    if (aiSearch && searchQuery) {
+      let aiOptimizedResult = []
+       aiOptimizedResult = ads.map(ad => ({
+        _id: ad._id,
+        title: ad.title,
+        description: ad.description,
+        price: ad.price,
+        location: ad.location,
+        category: ad.category,
+        subCategory: ad.subCategory,
+        images: ad.images,
+        views: ad.views,
+        createdAt: ad.createdAt
 
-    res.json({
-      ads,
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit)
-    });
+        }))
+        console.log("AI Optimized Result:", aiOptimizedResult);
+
+      const aiResult = await aiSearchAds({
+        aiOptimizedResult,
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+      }, searchQuery);
+      aiResult.limit = limit;
+      aiResult.page = page;
+      aiResult.totalPages = Math.ceil(aiResult.total / limit);
+      res.json(aiResult);
+    } else {
+      res.json({
+        ads,
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+      });
+    }
+
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

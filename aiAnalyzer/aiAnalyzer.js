@@ -218,23 +218,188 @@ Always respond with valid JSON ONLY.`
       throw new Error(`Groq API error: ${errorData.error?.message || response.statusText}`);
     }
 
+const data = await response.json();
+const aiResponse = data.choices[0].message.content;
+
+// Extract JSON from response using regex
+const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+if (!jsonMatch) {
+  throw new Error('No valid JSON in AI response');
+}
+
+const validJSON = JSON.parse(jsonMatch[0]);
+
+return validJSON;
+
+  } catch (error) {
+    console.error('Groq API Error:', error);
+    throw error;
+  }
+}
+export async function aiSearchAds(ads, searchCriteria) {
+  const GROQ_API_KEY = process.env.GROQ_API_KEY;
+
+  if (!GROQ_API_KEY) {
+    throw new Error('GROQ_API_KEY not configured');
+  }
+
+  const criteriaString = typeof searchCriteria === 'string'
+    ? searchCriteria
+    : JSON.stringify(searchCriteria, null, 2);
+
+  const prompt = `You are a classified ads search engine. The user wants to find ads matching their criteria.
+
+USER SEARCH QUERY: "${criteriaString}"
+
+ADS DATABASE:
+${JSON.stringify(ads, null, 2)}
+
+TASK:
+1. First, understand what the user is looking for:
+   - What product/category? (phones, laptops, furniture, etc.)
+   - What price range? (above X, below X, between X and Y)
+   - What location?
+   - Any other specific requirements?
+
+2. Filter the ads strictly based on these criteria:
+   - For PRICE: Use exact numerical comparison
+     * "above 8000" means price > 8000
+     * "below 50000" means price < 50000
+     * "between 5000 and 10000" means price >= 5000 AND price <= 10000
+   
+   - For CATEGORY: Match against category.name, subCategory, title, or description
+     * "phones" matches: Electronics/Mobiles, or any ad with "phone" in title/description
+   
+   - For LOCATION: Match against the location field
+   
+   - For TEXT: Match against title and description semantically
+
+3. Return ONLY the ads that meet ALL the criteria.
+
+4. Output format - respond with ONLY this JSON structure, no other text:
+{
+    "ads": [
+        {
+            "_id": "69134a72aac1e1c788512ea3",
+            "title": "Brand new iphone 17 pro for sale",
+            "price": 180000,
+            "location": "Kollam",
+            "category": {
+                "_id": "68f25ba4c11caea88a6c169e",
+                "name": "Electronics",
+                "description": "Devices and gadgets"
+            },
+            "subCategory": "Mobiles",
+            "images": [],
+            "description": "Brand new i phone 17 pro for sale ,16 gb 256 gb ,minor scratches ,6 months old 4 yrs warenty remaining ,full box available,charger available,black color,screen protector pre installed",
+            "seller": {
+                "_id": "69022878d5574642fc74e9a5",
+                "name": "Akshaya A J",
+                "email": "akshayaaj96@gmail.com"
+            },
+            "posted": "2025-11-11T14:38:42.159Z",
+            "usersInterested": [
+                "68f254e965a74d068dc12350",
+                "68f3a30397a898814b9dabf4"
+            ],
+            "views": 87,
+            "isActive": true,
+            "isSold": false,
+            "soldTo": null,
+            "createdAt": "2025-11-11T14:38:42.161Z",
+            "updatedAt": "2025-11-27T01:42:32.813Z",
+            "__v": 0
+        }
+    ],
+    "total": 1,
+    "totalPages": 1
+}
+
+If no ads match, return:
+{
+  "ads": [],
+  "total": 0,
+  "totalPages": 0
+}
+
+CRITICAL: Return ONLY valid JSON. Do not include any explanation, markdown formatting, or additional text.`;
+
+  try {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          {
+            role: "system",
+            content: `You are a precise search algorithm for classified ads. 
+
+RULES:
+1. Apply filters STRICTLY and LITERALLY
+2. For numerical comparisons (price), use exact math: > means greater than, < means less than
+3. Include an ad ONLY if it matches ALL specified criteria
+4. When filtering by price:
+   - "above 8000" → include only ads where price > 8000
+   - "below 50000" → include only ads where price < 50000
+   - Be precise with numbers
+5. Always output valid JSON only - no markdown, no explanation
+6. Double-check your price filtering before responding`
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        temperature: 0.1, // Very low for precise filtering
+        max_tokens: 8000, // Higher to handle more results
+        response_format: { type: "json_object" } // Forces JSON output (if supported by Groq)
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`Groq API error: ${errorData.error?.message || response.statusText}`);
+    }
+
     const data = await response.json();
-    const aiResponse = data.choices[0].message.content;
+    console.log('Raw AI Response:', data.choices[0].message.content);
+    
+    const aiResponse = data.choices[0].message.content.trim();
 
-    // // Extract JSON from response
-    // const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-    // if (!jsonMatch) {
-    //   throw new Error('No valid JSON in AI response');
-    // }
-
-    // const parsedData = JSON.parse(jsonMatch[0]);
-    // Step 1: Clean the string
-let cleaned = aiResponse.replace(/\n/g, '').replace(/\\"/g, '"');
-
-// Step 2: Parse to JSON
-let validJSON = JSON.parse(cleaned);
-
-    return validJSON;
+    // Try direct parsing first
+    try {
+      const validJSON = JSON.parse(aiResponse);
+      
+      // Validate structure
+      if (!validJSON.ads || !Array.isArray(validJSON.ads)) {
+        throw new Error('Invalid response structure - missing ads array');
+      }
+      
+      console.log(`AI returned ${validJSON.total} matching ads`);
+      return validJSON;
+      
+    } catch (parseError) {
+      console.error('Failed to parse AI response:', parseError);
+      console.error('Response was:', aiResponse);
+      
+      // Try to extract JSON with regex as fallback
+      const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('No valid JSON found in AI response');
+      }
+      
+      const validJSON = JSON.parse(jsonMatch[0]);
+      
+      if (!validJSON.ads || !Array.isArray(validJSON.ads)) {
+        throw new Error('Invalid response structure after regex extraction');
+      }
+      
+      return validJSON;
+    }
 
   } catch (error) {
     console.error('Groq API Error:', error);
