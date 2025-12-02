@@ -9,7 +9,7 @@ router.get("/listCategories", getAllAdCategories);
 router.post("/listUserAds", getUserAds);
 router.post("/", getAllAds);
 router.post("/postAdd", authMiddleware, fileUpload.array('images'), createAd);
-router.get("/chat", getChats);
+router.get("/chat",authMiddleware, getChats);
 router.get("/:id", getAdById);
 router.delete("/:id", authMiddleware, deleteAd);
 router.put("/edit/:id", authMiddleware, fileUpload.array('images'), editAd);

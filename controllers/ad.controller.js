@@ -113,6 +113,7 @@ export const getUserMessages = async (req, res) => {
 };
 export const getChats = async (req, res) => {
   try {
+    let currentUser = req.user?.name;
     const { adId, buyerId, sellerId } = req.query;
     if (!adId || !buyerId || !sellerId) {
       return res.status(400).json({ message: "adId, buyerId, and sellerId are required" });
@@ -140,7 +141,9 @@ export const getChats = async (req, res) => {
       { path: "to", select: "name email" }
     ])
     .sort({ createdAt: 1 });
-    const fraudCheck = await analyzeChatForFraud(chats);
+    console.log(currentUser)
+    const filteredChats = chats.filter(chat => chat.from.name !== currentUser);
+    const fraudCheck = await analyzeChatForFraud(filteredChats);
     res.json({ chats, fraudCheck });
   } catch (err) {
     res.status(500).json({ message: err.message });
