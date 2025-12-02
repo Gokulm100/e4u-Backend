@@ -406,3 +406,95 @@ RULES:
     throw error;
   }
 }
+export async function analyzeChatForFraud(chats) {
+try {
+    const GROQ_API_KEY = process.env.GROQ_API_KEY;
+  
+  if (!GROQ_API_KEY) {
+    throw new Error('GROQ_API_KEY not configured');
+  }
+  const prompt = `Analyze the following chat conversations for potential fraud indicators.
+
+Chat Conversations:
+${JSON.stringify(chats, null, 2)}
+
+Instructions:
+1. Look for common fraud indicators such as:
+   - Requests for payment outside the platform
+   - Unusual urgency or pressure to complete a transaction
+   - Inconsistent or evasive responses
+   - Offers that seem too good to be true
+   - Requests for personal or financial information
+   - Suspicious links or attachments
+   - Repeated changes in payment method
+   - Lack of willingness to meet in person (for local transactions)
+   - Offensive or aggressive behavior
+   - sensory language or threats
+   - sexual content or propositions
+   - Any other red flags commonly associated with fraud
+   
+2. Provide a summary of any potential fraud indicators found in the conversations.
+4. Return the summary as a JSON object with "fraudIndicators" and "recommendations" fields.
+5. Keep the recommendations concise and actionable.
+6. Ensure the JSON is STRICTLY valid: no trailing commas, no comments, no extra text, and all strings are double-quoted.
+7. DO NOT include any additional text or explanation outside the JSON format.
+8. DONT fabricate indicators; only report what is evident in the chat data.
+9. DONT return Chat as fraud unless there are clear indicators.
+10. If no fraud indicators are found, return an empty "fraudIndicators" array and NO recommendations.
+Example output structure:
+{
+  "type":"PAYMENT_FRAUD",
+  "fraudIndicators": [
+    "User requested payment via wire transfer",
+    "User pressured for quick transaction"
+  ],
+  "recommendations": "Be Cautious: Verify buyer identity, avoid off-platform payments, report suspicious activity."}
+
+Now provide the analysis in the specified STRICT JSON format:`;
+
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          {
+            role: "system",
+            content: `You are an expert at analyzing chat conversations for fraud indicators. 
+You analyze the provided chat data and return a summary of potential fraud indicators and recommendations.
+Always respond with valid JSON only, no explanation or additional text. return ONLY relevant key-value pairs as JSON. 
+Never include fields with "Not specified" or empty values.
+Always respond with valid JSON ONLY.`
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],  
+      })
+    });
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`Groq API error: ${errorData.error?.message || response.statusText}`);
+    }
+    const data = await response.json();
+    const aiResponse = data.choices[0].message.content;
+
+    // Extract JSON from response using regex
+    const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('No valid JSON in AI response');
+    }
+
+    const validJSON = JSON.parse(jsonMatch[0]);
+
+    return validJSON;
+
+  } catch (error) {
+    console.error('Groq API Error:', error);
+    throw error;
+}
+}

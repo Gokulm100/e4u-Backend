@@ -2,7 +2,7 @@ import Chat from "../models/chat.model.js";
 import Ad from "../models/ad.model.js";
 import User from "../models/user.model.js";
 import AdCategory from "../models/ad.category.model.js";
-import {analyzeDescription,aiSearchAds} from "../aiAnalyzer/aiAnalyzer.js";
+import {analyzeDescription,aiSearchAds,analyzeChatForFraud} from "../aiAnalyzer/aiAnalyzer.js";
 import { sendChatNotification } from "../services/pushService.js";
 import mongoose from "mongoose";
 
@@ -140,8 +140,8 @@ export const getChats = async (req, res) => {
       { path: "to", select: "name email" }
     ])
     .sort({ createdAt: 1 });
-    
-    res.json(chats);
+    const fraudCheck = await analyzeChatForFraud(chats);
+    res.json({ chats, fraudCheck });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
