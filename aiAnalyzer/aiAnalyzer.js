@@ -521,6 +521,8 @@ Pre-Processing Step (execute this FIRST before any other analysis):
 - Only after the HIGHEST OFFER is locked, proceed to determine the BEST OFFER from the remaining candidates.
 - CONSTRAINT: The "value" of "Highest Offer" MUST always be >= the "value" of "Best Offer".
   If your output violates this, you have made an error — recheck and correct before returning.
+- If no valid price offers are found in the chat data, set "Highest Offer" value to "-" and description to "No valid offers found", and do NOT include a "Best Offer" entry at all.
+
 
 Analysis Steps:
 1. Parse all provided chat data and ad details before generating any output.
@@ -550,12 +552,14 @@ Output Rules:
 
 Self-Validation (execute this BEFORE returning output):
 - Convert "Highest Offer" value and "Best Offer" value to integers.
-- If Highest Offer < Best Offer, you have misidentified one or both — re-analyze and correct.
-- Only return output when Highest Offer >= Best Offer is confirmed.
 - Only return a value for "Best Offer" if there is a clear candidate that meets the criteria; otherwise, omit the "Best Offer" entry entirely.
 - Only return values for offers that are explicitly mentioned in the chat data; do NOT fabricate or infer offers that are not clearly stated.
 - if no valid offers are found in the chat data, return value as - with description as "No valid offers found".
-
+- If Highest Offer < Best Offer, you have misidentified one or both — re-analyze and correct.
+- Only return output when Highest Offer >= Best Offer is confirmed.
+- NEVER return a "Best Offer" entry if there is no valid "Highest Offer" identified.
+- NEVER return fabricated offers that are not explicitly mentioned in the chat data.
+- NEVER return a "Best Offer" that exceeds the "Highest Offer".
 Expected Output Format:
 {
     "summary": [
