@@ -6,7 +6,7 @@ const router = express.Router();
 
 router.post("/summarizeAdUsingAi",authMiddleware, summarizeAdUsingAi);
 router.post("/provideAiAnalytics", provideAiAnalytics);
-router.get("/provideAiPriceInsights",provideAiPriceInsights);
+router.post("/provideAiPriceInsights",provideAiPriceInsights);
 
 
 
