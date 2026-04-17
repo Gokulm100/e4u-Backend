@@ -512,17 +512,18 @@ export async function analyzeAiPriceInsights(mainAdData, relatedAdsData ) {
 // Related Ads Data:
 // ${JSON.stringify(relatedAdsData, null, 2)}
 
-Instructions:
-
 Pre-Processing Step (execute this FIRST before any other analysis):
 - Scan ALL messages in the chat data and extract every numeric value that represents a price offer made by a buyer.
-- List them all internally, then select the MAXIMUM value. This becomes the HIGHEST OFFER.
-- This step is purely mathematical — sentiment, behavior, and buyer quality are COMPLETELY IRRELEVANT here.
-- Only after the HIGHEST OFFER is locked, proceed to determine the BEST OFFER from the remaining candidates.
+- An offer is ONLY valid if a buyer has EXPLICITLY stated a price they are willing to pay (e.g., "I'll give you ₹30,000", "will you take 25000?").
+- The following are NOT offers and must be ignored:
+    * The seller's own listed price
+    * Questions about the price (e.g., "what is your final price?")
+    * General price discussions without a concrete number from the buyer
+    * Implied or inferred prices — only explicit numeric offers count
+- If NO valid offers are found, set HIGHEST OFFER = null and BEST OFFER = null.
+- If at least one valid offer exists, select the MAXIMUM value as HIGHEST OFFER, then evaluate BEST OFFER.
 - CONSTRAINT: The "value" of "Highest Offer" MUST always be >= the "value" of "Best Offer".
   If your output violates this, you have made an error — recheck and correct before returning.
-- If no valid price offers are found in the chat data, set "Highest Offer" value to "-" and description to "No valid offers found", and do NOT include a "Best Offer" entry at all.
-
 
 Analysis Steps:
 1. Parse all provided chat data and ad details before generating any output.
@@ -541,26 +542,25 @@ Analysis Steps:
 9. The description field must be written in second person ("You have received...", "Your asking price...") 
    and must weave together the offer value, buyer behavior signals, and any red flags into a single fluid sentence 
    or two — do not use bullet points inside descriptions.
+10. If HIGHEST OFFER = null, the "Highest Offer" and "Best Offer" objects must use "value": "null" and the 
+    description must clearly state that no explicit offers have been received yet — do NOT fabricate a number.
 
 Output Rules:
-10. Output MUST be a strictly valid JSON object with a single top-level key "summary" whose value is an array
+11. Output MUST be a strictly valid JSON object with a single top-level key "summary" whose value is an array
     of objects, each with exactly three fields: "title" (string), "value" (string), "description" (string).
-11. The "value" field must contain ONLY the raw numeric string (e.g., "40000"), no currency symbols or commas.
-12. The JSON must have: no trailing commas, no comments, no markdown, no extra text outside the object.
-13. Only include insights that are EXPLICITLY supported by the provided data — do not infer or fabricate.
-14. The output structure must STRICTLY match the format below — include only relevant entries, no additional keys.
+12. The "value" field must contain ONLY the raw numeric string (e.g., "40000") or the string "null" if no 
+    offer exists — no currency symbols or commas.
+13. The JSON must have: no trailing commas, no comments, no markdown, no extra text outside the object.
+14. Only include insights that are EXPLICITLY supported by the provided data — do not infer or fabricate.
+15. The output structure must STRICTLY match the format below — include only relevant entries, no additional keys.
 
 Self-Validation (execute this BEFORE returning output):
-- Convert "Highest Offer" value and "Best Offer" value to integers.
-- Only return a value for "Best Offer" if there is a clear candidate that meets the criteria; otherwise, omit the "Best Offer" entry entirely.
-- Only return values for offers that are explicitly mentioned in the chat data; do NOT fabricate or infer offers that are not clearly stated.
-- if no valid offers are found in the chat data, return value as - with description as "No valid offers found".
+- Confirm that every "value" in the output corresponds to a price EXPLICITLY stated by a buyer in the chat.
+- If no such price exists, confirm "value" is "null" for both Highest and Best Offer.
 - If Highest Offer < Best Offer, you have misidentified one or both — re-analyze and correct.
-- Only return output when Highest Offer >= Best Offer is confirmed.
-- NEVER return a "Best Offer" entry if there is no valid "Highest Offer" identified.
-- NEVER return fabricated offers that are not explicitly mentioned in the chat data.
-- NEVER return a "Best Offer" that exceeds the "Highest Offer".
-Expected Output Format:
+- Only return output after all three checks pass.
+
+Expected Output Format (with offers):
 {
     "summary": [
         {
@@ -575,6 +575,24 @@ Expected Output Format:
             "value": "30000",
             "description": "You have received a best offer of ₹30,000 from an interested buyer, which is
             close to your asking price and the buyer seems genuinely interested."
+        }
+    ]
+}
+
+Expected Output Format (no offers):
+{
+    "summary": [
+        {
+            "title": "Highest Offer",
+            "value": "null",
+            "description": "You have not received any explicit price offers yet. Buyers have shown interest
+            but none have committed to a specific price."
+        },
+        {
+            "title": "Best Offer",
+            "value": "null",
+            "description": "No best offer can be determined at this time as no explicit offers have been
+            received from buyers."
         }
     ]
 }
