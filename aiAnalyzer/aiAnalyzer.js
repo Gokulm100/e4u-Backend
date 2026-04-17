@@ -498,3 +498,101 @@ Always respond with valid JSON ONLY.`
     throw error;
 }
 }
+export async function analyzeAiPriceInsights(mainAdData, relatedAdsData ) {
+  const GROQ_API_KEY = process.env.GROQ_API_KEY;
+  
+  if (!GROQ_API_KEY) {
+    throw new Error('GROQ_API_KEY not configured');
+  }
+  const prompt = `Analyze the following main ad data in the context of the related ads data provided.
+
+// Main Ad Data:
+// ${JSON.stringify(mainAdData, null, 2)}
+
+// Related Ads Data:
+// ${JSON.stringify(relatedAdsData, null, 2)}
+
+Instructions:
+1. Provide the highest offer and the best offer received along with a consise description on why its the best or highest.
+2. Compare the price of the main ad with similar ads in the same category and location.
+3. Analyze the chat data for any location insights based on buyer interactions.
+4. Analyze the chat data for buyer sentiment and interest level,point out any suspicious behavior or red flags.
+5. Analyze the chat data for any price-related feedback from potential buyers.
+6. Keep the description concise and focused on price insights and buyer sentiment related to price.
+7. Return the summary as a JSON array of objects with "title", "value", and "description" fields.
+8. Ensure the JSON is STRICTLY valid: no trailing commas, no comments, no extra text, and all strings are double-quoted.
+9. DO NOT include any additional text or explanation outside the JSON format.
+10. Extract ONLY information that is EXPLICITLY mentioned in the Examples below.
+11.The final output should STRICTLY follow the STRUCTURE shown in the example, with only relevant key-value pairs included.
+
+Example output structure:
+{     
+"summary":  [      
+        {
+            "title": "Highest Offer",
+            "value": "40000",
+            "description": "You have received a highest offer of ₹40,000 from an interested buyer, even though the offer is high the buyer does not seem genuine as he is not willing to negotiate or discuss the price and is pushing for a quick sale which seems suspicious."
+        },
+        {
+            "title": "Best Offer",
+            "value": "30000",
+            "description": "You have received a best offer of ₹30,000 from an interested buyer, which is close to your asking price,the buyer seems genuinely interested."
+        }
+    ]
+}
+
+
+Now provide the analysis in the specified STRICT JSON format to only include the Highest and Best Offer:`;
+
+  try {
+    console.log("price")
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          {
+            role: "system",
+            content: `You are an expert at analyzing classified ads data. 
+You analyze the provided mainAdData with the relatedAdsData and return the highest offer and best offer received along with a concise description, compare the price of the main ad with similar ads in the same category and location, analyze the chat data for any location insights based on buyer interactions, analyze the chat data for buyer sentiment and interest level, and analyze the chat data for any price-related feedback from potential buyers.
+Always respond with valid JSON only, no explanation or additional text. return ONLY relevant key-value pairs as JSON. 
+Never include fields with "Not specified" or empty values.
+Always respond with valid JSON ONLY.`
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        temperature: 0.2,
+        max_tokens: 1000
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`Groq API error: ${errorData.error?.message || response.statusText}`);
+    }
+
+const data = await response.json();
+const aiResponse = data.choices[0].message.content;
+
+// Extract JSON from response using regex
+const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+if (!jsonMatch) {
+  throw new Error('No valid JSON in AI response');
+}
+
+const validJSON = JSON.parse(jsonMatch[0]);
+
+return validJSON;
+
+  } catch (error) {
+    console.error('Groq API Error:', error);
+    throw error;
+  }
+}

@@ -1,6 +1,6 @@
 import Chat from "../models/chat.model.js";
 import Ad from "../models/ad.model.js";
-import {analyzeDescription,analyzeAd} from "../aiAnalyzer/aiAnalyzer.js";
+import {analyzeDescription,analyzeAd,analyzeAiPriceInsights} from "../aiAnalyzer/aiAnalyzer.js";
 
 import mongoose from "mongoose";
 
@@ -90,7 +90,46 @@ export async function provideAiAnalytics(req, res) {
     throw error;
   }
 }
+export async function provideAiPriceInsights(req, res) {
+  try {
+    const adId  = new mongoose.Types.ObjectId(req.body.adId);
+    // const userId = req.user._id;
+    const category = new mongoose.Types.ObjectId(req.body.category);
+    const subCategory = req.body.subCategory || 'General';
+    // Fetch ad details with category and seller populated
+    const adData = await Ad.findById(adId).populate('category').populate('seller');
 
+    // Fetch all chats related to this ad
+    const chatData = await Chat.find({ adId: adId }).populate('from').populate('to');
+    // Fetch all ads with the provided category and subcategory
+    const relatedAds = await Ad.find({
+        category: category,
+        subCategory: subCategory
+    });
+    const relatedAdChats = await Chat.find({ adId: { $in: relatedAds.map(ad => ad._id) } }).populate('from').populate('to');
+    let constructedMainAdData = constructMainAdData(adData,chatData);
+    let constructedRelatedAdsData = constructRelatedAdsData(relatedAds,relatedAdChats);
+    // console.log('🤖 Analyzing ad and related data...',constructedMainAdData);
+    // console.log('🤖 Analyzing ad and related data...',constructedRelatedAdsData);
+
+    const aiAnalysis = await analyzeAiPriceInsights({
+      constructedMainAdData,
+      constructedRelatedAdsData
+    });
+
+    console.log('✅ AI summary generated successfully');
+
+    return res.json({
+      success: true,
+      data: aiAnalysis||{}
+    });
+
+
+  } catch (error) {
+    console.error('Error fetching AI price insights:', error);
+    throw error;
+  }
+}
 
 function constructMainAdData(adData,chatData) {
   return {

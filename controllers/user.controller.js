@@ -101,18 +101,22 @@ export const acceptConsent = async (req, res) => {
   try {
     const userId = req.user.id;
     const { version } = req.body;
+    let data  = {}
 
     if (!version) {
       return res.status(400).json({ message: "Consent version is required" });
     }
-
+    data.userId = userId;
+    data.consentVersionId = version;
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
-
-    user.consentVersion = version;
-    await user.save();
+    let consentStatus = await Consent.create(data);
+    if(consentStatus) {
+      user.isConsented = true;
+      await user.save();
+    }
 
     res.json({ message: "Consent accepted successfully" });
   } catch (err) {
@@ -137,3 +141,27 @@ export const revokeConsent = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+export const reportUser = async (req, res) => {
+  try {
+    const reportedUserId = req.body.userId;
+    if (!reportedUserId) {
+      return res.status(400).json({ message: "Reported user ID is required" });
+    }
+
+    const reportedUser = await User.findById(reportedUserId);
+    if (!reportedUser) {
+      return res.status(404).json({ message: "Reported user not found" });
+    }
+
+    reportedUser.reportCounter += 1;
+    if(reportedUser.reportCounter >= 5){
+      reportedUser.isActive = false; // Deactivate user after 5 reports
+      reportedUser.isBlocked = true;
+    }
+    await reportedUser.save();
+
+    res.json({ message: "User reported successfully" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+}

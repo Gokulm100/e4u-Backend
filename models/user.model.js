@@ -34,6 +34,18 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    reportCounter: {
+      type: Number,
+      default: 0,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+    isBlocked: {
+      type: Boolean,
+      default: false,
+    },
   },
   { versionKey: false }
 );
