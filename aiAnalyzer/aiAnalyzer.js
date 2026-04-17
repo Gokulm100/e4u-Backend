@@ -513,30 +513,61 @@ export async function analyzeAiPriceInsights(mainAdData, relatedAdsData ) {
 // ${JSON.stringify(relatedAdsData, null, 2)}
 
 Instructions:
-1. Provide the highest offer and the best offer received along with a consise description on why its the best or highest.
-2. Compare the price of the main ad with similar ads in the same category and location.
-3. Analyze the chat data for any location insights based on buyer interactions.
-4. Analyze the chat data for buyer sentiment and interest level,point out any suspicious behavior or red flags.
-5. Analyze the chat data for any price-related feedback from potential buyers.
-6. Keep the description concise and focused on price insights and buyer sentiment related to price.
-7. Return the summary as a JSON array of objects with "title", "value", and "description" fields.
-8. Ensure the JSON is STRICTLY valid: no trailing commas, no comments, no extra text, and all strings are double-quoted.
-9. DO NOT include any additional text or explanation outside the JSON format.
-10. Extract ONLY information that is EXPLICITLY mentioned in the Examples below.
-11.The final output should STRICTLY follow the STRUCTURE shown in the example, with only relevant key-value pairs included.
 
-Example output structure:
-{     
-"summary":  [      
+Pre-Processing Step (execute this FIRST before any other analysis):
+- Scan ALL messages in the chat data and extract every numeric value that represents a price offer made by a buyer.
+- List them all internally, then select the MAXIMUM value. This becomes the HIGHEST OFFER.
+- This step is purely mathematical — sentiment, behavior, and buyer quality are COMPLETELY IRRELEVANT here.
+- Only after the HIGHEST OFFER is locked, proceed to determine the BEST OFFER from the remaining candidates.
+- CONSTRAINT: The "value" of "Highest Offer" MUST always be >= the "value" of "Best Offer".
+  If your output violates this, you have made an error — recheck and correct before returning.
+
+Analysis Steps:
+1. Parse all provided chat data and ad details before generating any output.
+2. The HIGHEST OFFER is already locked from the Pre-Processing Step — do NOT re-evaluate it.
+3. Identify the BEST OFFER: the most favorable offer considering price, buyer seriousness (e.g., readiness to
+   meet, lack of excessive bargaining, prompt responses), and urgency — this may differ from the highest offer.
+4. Compare the ad's listed price against similar ads in the same category and location; note whether it is
+   overpriced, underpriced, or fairly priced.
+5. Extract location insights from buyer messages (e.g., preferred meetup spots, distance concerns, local demand signals).
+6. Assess buyer sentiment: classify each active buyer as High / Medium / Low interest based on their message
+   tone, frequency, and commitment signals. Flag any red flags (e.g., lowball patterns, ghosting after price
+   reveal, suspicious urgency, or scam-like behavior).
+7. Extract all price-related feedback from buyers (e.g., "too expensive", suggested counter-prices, comparisons
+   to other listings).
+8. Keep all descriptions concise and focused strictly on price insights and buyer sentiment related to price.
+9. The description field must be written in second person ("You have received...", "Your asking price...") 
+   and must weave together the offer value, buyer behavior signals, and any red flags into a single fluid sentence 
+   or two — do not use bullet points inside descriptions.
+
+Output Rules:
+10. Output MUST be a strictly valid JSON object with a single top-level key "summary" whose value is an array
+    of objects, each with exactly three fields: "title" (string), "value" (string), "description" (string).
+11. The "value" field must contain ONLY the raw numeric string (e.g., "40000"), no currency symbols or commas.
+12. The JSON must have: no trailing commas, no comments, no markdown, no extra text outside the object.
+13. Only include insights that are EXPLICITLY supported by the provided data — do not infer or fabricate.
+14. The output structure must STRICTLY match the format below — include only relevant entries, no additional keys.
+
+Self-Validation (execute this BEFORE returning output):
+- Convert "Highest Offer" value and "Best Offer" value to integers.
+- If Highest Offer < Best Offer, you have misidentified one or both — re-analyze and correct.
+- Only return output when Highest Offer >= Best Offer is confirmed.
+
+Expected Output Format:
+{
+    "summary": [
         {
             "title": "Highest Offer",
             "value": "40000",
-            "description": "You have received a highest offer of ₹40,000 from an interested buyer, even though the offer is high the buyer does not seem genuine as he is not willing to negotiate or discuss the price and is pushing for a quick sale which seems suspicious."
+            "description": "You have received a highest offer of ₹40,000 from an interested buyer; even though
+            the offer is high, the buyer does not seem genuine as they are not willing to negotiate and are
+            pushing for a quick sale, which appears suspicious."
         },
         {
             "title": "Best Offer",
             "value": "30000",
-            "description": "You have received a best offer of ₹30,000 from an interested buyer, which is close to your asking price,the buyer seems genuinely interested."
+            "description": "You have received a best offer of ₹30,000 from an interested buyer, which is
+            close to your asking price and the buyer seems genuinely interested."
         }
     ]
 }
