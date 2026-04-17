@@ -534,25 +534,27 @@ Analysis Steps:
    overpriced, underpriced, or fairly priced.
 5. Extract location insights from buyer messages (e.g., preferred meetup spots, distance concerns, local demand signals).
 6. Assess buyer sentiment: classify each active buyer as High / Medium / Low interest based on their message
-   tone, frequency, and commitment signals. Flag any red flags (e.g., lowball patterns, ghosting after price
-   reveal, suspicious urgency, or scam-like behavior).
-7. Extract all price-related feedback from buyers (e.g., "too expensive", suggested counter-prices, comparisons
+   tone, frequency, and commitment signals. ALWAYS Flag any red flags  (e.g., lowball patterns, ghosting after price
+   reveal, suspicious urgency, or scam-like behavior) with highest priority.
+7. Weave together the offer values, buyer behavior signals, and any red flags into a concise summary that provides actionable insights to the seller about their pricing strategy and buyer interactions.
+8. ALWAYS prioritize ANY RED FLAGS you identify in the chat data — if a buyer exhibits any suspicious behavior like lowball patterns, ghosting after price reveal, suspicious urgency, or scam-like behavior OR asking for personal information like account details flag them as RED FLAG, this should be clearly highlighted in the summary regardless of their offer value or interest level.
+9. Extract all price-related feedback from buyers (e.g., "too expensive", suggested counter-prices, comparisons
    to other listings).
-8. Keep all descriptions concise and focused strictly on price insights and buyer sentiment related to price.
-9. The description field must be written in second person ("You have received...", "Your asking price...") 
+10. Keep all descriptions concise and focused strictly on price insights and buyer sentiment related to price.
+11. The description field must be written in second person ("You have received...", "Your asking price...") 
    and must weave together the offer value, buyer behavior signals, and any red flags into a single fluid sentence 
-   or two — do not use bullet points inside descriptions.
-10. If HIGHEST OFFER = null, the "Highest Offer" and "Best Offer" objects must use "value": "null" and the 
+   or two — do not use bullet points inside descriptions,keep it PRECISE and SHORT focusing on RED FLAGS if any.
+12. If HIGHEST OFFER = null, the "Highest Offer" and "Best Offer" objects must use "value": "null" and the 
     description must clearly state that no explicit offers have been received yet — do NOT fabricate a number.
 
 Output Rules:
-11. Output MUST be a strictly valid JSON object with a single top-level key "summary" whose value is an array
+13. Output MUST be a strictly valid JSON object with a single top-level key "summary" whose value is an array
     of objects, each with exactly three fields: "title" (string), "value" (string), "description" (string).
-12. The "value" field must contain ONLY the raw numeric string (e.g., "40000") or the string "null" if no 
+14. The "value" field must contain ONLY the raw numeric string (e.g., "40000") or the string "null" if no 
     offer exists — no currency symbols or commas.
-13. The JSON must have: no trailing commas, no comments, no markdown, no extra text outside the object.
-14. Only include insights that are EXPLICITLY supported by the provided data — do not infer or fabricate.
-15. The output structure must STRICTLY match the format below — include only relevant entries, no additional keys.
+15. The JSON must have: no trailing commas, no comments, no markdown, no extra text outside the object.
+16. Only include insights that are EXPLICITLY supported by the provided data — do not infer or fabricate.
+17. The output structure must STRICTLY match the format below — include only relevant entries, no additional keys.
 
 Self-Validation (execute this BEFORE returning output):
 - Confirm that every "value" in the output corresponds to a price EXPLICITLY stated by a buyer in the chat.
