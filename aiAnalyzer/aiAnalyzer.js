@@ -552,6 +552,9 @@ Self-Validation (execute this BEFORE returning output):
 - Convert "Highest Offer" value and "Best Offer" value to integers.
 - If Highest Offer < Best Offer, you have misidentified one or both — re-analyze and correct.
 - Only return output when Highest Offer >= Best Offer is confirmed.
+- Only return a value for "Best Offer" if there is a clear candidate that meets the criteria; otherwise, omit the "Best Offer" entry entirely.
+- Only return values for offers that are explicitly mentioned in the chat data; do NOT fabricate or infer offers that are not clearly stated.
+- if no valid offers are found in the chat data, return value as - with description as "No valid offers found".
 
 Expected Output Format:
 {
