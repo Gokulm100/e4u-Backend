@@ -134,6 +134,7 @@ export const revokeConsent = async (req, res) => {
     }
 
     user.consentVersion = null; // Or set to a specific value indicating revocation
+    user.isConsented = false;
     await user.save();
 
     res.json({ message: "Consent revoked successfully" });
