@@ -112,78 +112,55 @@ Example output structure:
 Now analyze the description above and return ONLY the JSON:`;
 }
 
-export async function analyzeAd(mainAdData, relatedAdsData ) {
+export async function analyzeAd(mainAdData, relatedAdsData) {
   const GROQ_API_KEY = process.env.GROQ_API_KEY;
-  
-  if (!GROQ_API_KEY) {
-    throw new Error('GROQ_API_KEY not configured');
-  }
-  const prompt = `Analyze the following main ad data in the context of the related ads data provided.
+  if (!GROQ_API_KEY) throw new Error('GROQ_API_KEY not configured');
 
-Main Ad Data:
+  const systemPrompt = `You are a classified ads performance analyst. Analyze a seller's ad against related listings and return ONLY a strictly valid JSON object — no markdown, no explanation, no extra text.
+
+ANALYSIS ITEMS (include only those supported by the data):
+- Inquiries         → count of unique buyers who contacted the seller
+- Location Insights → buyer locations extracted from chat data
+- Price Comparison  → how the ad's price compares to similar ads nearby
+- Competitor Analysis → notable sold/active similar ads and their prices
+- Ad Visibility     → views/engagement relative to similar listings
+- Open Offers       → count of active, unresolved buyer offers
+
+RECOMMENDATIONS (always include if data supports it):
+- Recommended Price → a single suggested price based on comparable listings
+- Optimal Price Range → price band for a faster sale based on market trends
+
+STRICT RULES:
+- Only include items explicitly supported by the provided data — never fabricate
+- value field: short, factual (e.g. "3", "Delhi", "Higher than similar ads") — no ₹ symbol in value
+- description field: 1–2 sentences, second person ("Your ad...", "You have...")
+- Omit any analysis item if the data does not support it
+- recommendations array may be empty [] if data is insufficient`;
+
+  const userPrompt = `Analyze this ad against the related ads data below.
+
+MAIN AD:
 ${JSON.stringify(mainAdData, null, 2)}
 
-Related Ads Data:
+RELATED ADS:
 ${JSON.stringify(relatedAdsData, null, 2)}
 
-Instructions:
-1. Provide a concise summary highlighting key insights, trends, and recommendations.
-2. Focus on helping the seller improve their ad performance.
-3. Return the summary as a JSON array of objects with "title", "value", and "description" fields.
-4. Ensure the JSON is STRICTLY valid: no trailing commas, no comments, no extra text, and all strings are double-quoted.
-5. DO NOT include any additional text or explanation outside the JSON format.
-6. Extract ONLY information that is EXPLICITLY mentioned in the Examples below.
-7. LOCATION INSIGHTS can be identified from chat data of mainAdData and seller interactions.
-Example output structure:
-{     
-"analysis":  [      
-        {
-            "title": "Inquiries",
-            "value": "1",
-            "description": "You have received 1 inquiry from an interested buyer, but they declined after discussing the price."
-        },
-        {
-            "title": "Location Insights",
-            "value": "Delhi",
-            "description": "Majority of interested buyers are from Delhi and Mumbai."
-        },
-        {
-            "title": "Price Comparison",
-            "value": "Higher than similar ads",
-            "description": "The price of your iPhone 17 Pro is higher than similar ads in the same location, which may be deterring potential buyers."
-        },
-        {
-            "title": "Competitor Analysis",
-            "value": "Similar ad sold for ₹90,000",
-            "description": "A similar iPhone 17 Pro was sold for ₹90,000 in the same location, indicating a potential price adjustment opportunity."
-        },
-        {
-            "title": "Highest Offer Received",
-            "value": "₹100,000",
-            "description": "The Highest offer received for your ad is ₹100,000, which is below your asking price."
-        },
-        {
-            "title": "Ad Visibility",
-            "value": "Low",
-            "description": "Your ad has received fewer views compared to similar listings, suggesting it may benefit from improved keywords or better images."
-        },
-        {
-            "title": "Open Offers",
-            "value": "2",
-            "description": "You currently have 2 open offers from interested buyers, indicating good interest in your ad."
-        }
-    ],
-    "recommendations": [{
-      "title": "Recommended Price",
-      "description": "₹1,15,000 — Based on similar ads in this category, most competitive listings are priced between ₹1,10,000 and ₹1,20,000."
-},{
-      "title": "Optimal Price Range",
-      "description": "For a faster sale, set your price between ₹1,12,000 and ₹1,18,000 as per recent market trends."
-}]
-}
-
-
-Now provide the analysis in the specified STRICT JSON format:`;
+Return ONLY this JSON structure:
+{
+  "analysis": [
+    {
+      "title": "<item title>",
+      "value": "<short factual value>",
+      "description": "<1–2 sentences, second person>"
+    }
+  ],
+  "recommendations": [
+    {
+      "title": "<Recommended Price | Optimal Price Range>",
+      "description": "<concise actionable insight with ₹ amounts>"
+    }
+  ]
+}`;
 
   try {
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -195,21 +172,11 @@ Now provide the analysis in the specified STRICT JSON format:`;
       body: JSON.stringify({
         model: "llama-3.3-70b-versatile",
         messages: [
-          {
-            role: "system",
-            content: `You are an expert at analyzing classified ads data. 
-You analyze the provided mainAdData with the relatedAdsData and return a concise summary highlighting key insights, trends, and recommendations helping a seller improve their ad performance.
-Always respond with valid JSON only, no explanation or additional text. return ONLY relevant key-value pairs as JSON. 
-Never include fields with "Not specified" or empty values.
-Always respond with valid JSON ONLY.`
-          },
-          {
-            role: "user",
-            content: prompt
-          }
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
         ],
-        temperature: 0.2,
-        max_tokens: 1000
+        temperature: 0.1,
+        max_tokens: 800
       })
     });
 
@@ -218,18 +185,19 @@ Always respond with valid JSON ONLY.`
       throw new Error(`Groq API error: ${errorData.error?.message || response.statusText}`);
     }
 
-const data = await response.json();
-const aiResponse = data.choices[0].message.content;
+    const data = await response.json();
+    const aiResponse = data.choices[0].message.content;
 
-// Extract JSON from response using regex
-const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-if (!jsonMatch) {
-  throw new Error('No valid JSON in AI response');
-}
+    const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('No valid JSON in AI response');
 
-const validJSON = JSON.parse(jsonMatch[0]);
+    const parsed = JSON.parse(jsonMatch[0]);
 
-return validJSON;
+    // Post-processing: ensure shape is always consistent
+    return {
+      analysis: Array.isArray(parsed.analysis) ? parsed.analysis : [],
+      recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : []
+    };
 
   } catch (error) {
     console.error('Groq API Error:', error);
@@ -407,203 +375,45 @@ RULES:
   }
 }
 export async function analyzeChatForFraud(chats) {
-try {
-    const GROQ_API_KEY = process.env.GROQ_API_KEY;
-  
-  if (!GROQ_API_KEY) {
-    throw new Error('GROQ_API_KEY not configured');
-  }
-  const prompt = `Analyze the following chat conversations for potential fraud indicators.
+  const GROQ_API_KEY = process.env.GROQ_API_KEY;
+  if (!GROQ_API_KEY) throw new Error('GROQ_API_KEY not configured');
 
-Chat Conversations:
+  const systemPrompt = `You are a fraud detection analyst for a classified ads platform. Analyze chat conversations and return ONLY a strictly valid JSON object — no markdown, no explanation, no extra text.
+
+FRAUD INDICATORS TO DETECT:
+- Off-platform payment requests (wire transfer, crypto, gift cards, UPI outside app)
+- Requests for personal/financial/account information
+- Suspicious urgency or pressure to transact quickly
+- Offers that are unrealistically good
+- Inconsistent, evasive, or scripted responses
+- Repeated payment method changes
+- Refusal to meet in person for local deals
+- Suspicious links or attachments
+- Offensive, threatening, or aggressive language
+- Sexual content or propositions
+
+CLASSIFICATION TYPES (use the most applicable):
+PAYMENT_FRAUD | IDENTITY_THEFT | PHISHING | SCAM_OFFER | HARASSMENT | SEXUAL_CONTENT | SAFE
+
+STRICT RULES:
+- Only report indicators explicitly present in the chat — never fabricate
+- Do NOT classify as fraud unless there are clear, explicit signals
+- If no fraud found: return type "SAFE", empty fraudIndicators array, and omit recommendations entirely
+- fraudIndicators must be short, factual observations (not opinions)
+- recommendations must be one concise actionable sentence`;
+
+  const userPrompt = `Analyze these chat conversations for fraud:
+
 ${JSON.stringify(chats, null, 2)}
 
-Instructions:
-1. Look for common fraud indicators such as:
-   - Requests for payment outside the platform
-   - Unusual urgency or pressure to complete a transaction
-   - Inconsistent or evasive responses
-   - Offers that seem too good to be true
-   - Requests for personal or financial information
-   - Suspicious links or attachments
-   - Repeated changes in payment method
-   - Lack of willingness to meet in person (for local transactions)
-   - Offensive or aggressive behavior
-   - sensory language or threats
-   - sexual content or propositions
-   - Any other red flags commonly associated with fraud
-   
-2. Provide a summary of any potential fraud indicators found in the conversations.
-4. Return the summary as a JSON object with "fraudIndicators" and "recommendations" fields.
-5. Keep the recommendations concise and actionable.
-6. Ensure the JSON is STRICTLY valid: no trailing commas, no comments, no extra text, and all strings are double-quoted.
-7. DO NOT include any additional text or explanation outside the JSON format.
-8. DONT fabricate indicators; only report what is evident in the chat data.
-9. DONT return Chat as fraud unless there are clear indicators.
-10. If no fraud indicators are found, return an empty "fraudIndicators" array and NO recommendations.
-Example output structure:
+Return ONLY this JSON structure:
 {
-  "type":"PAYMENT_FRAUD",
-  "fraudIndicators": [
-    "User requested payment via wire transfer",
-    "User pressured for quick transaction"
-  ],
-  "recommendations": "Be Cautious: Verify buyer identity, avoid off-platform payments, report suspicious activity."}
-
-Now provide the analysis in the specified STRICT JSON format:`;
-
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${GROQ_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        messages: [
-          {
-            role: "system",
-            content: `You are an expert at analyzing chat conversations for fraud indicators. 
-You analyze the provided chat data and return a summary of potential fraud indicators and recommendations.
-Always respond with valid JSON only, no explanation or additional text. return ONLY relevant key-value pairs as JSON. 
-Never include fields with "Not specified" or empty values.
-Always respond with valid JSON ONLY.`
-          },
-          {
-            role: "user",
-            content: prompt
-          }
-        ],  
-      })
-    });
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(`Groq API error: ${errorData.error?.message || response.statusText}`);
-    }
-    const data = await response.json();
-    const aiResponse = data.choices[0].message.content;
-
-    // Extract JSON from response using regex
-    const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('No valid JSON in AI response');
-    }
-
-    const validJSON = JSON.parse(jsonMatch[0]);
-
-    return validJSON;
-
-  } catch (error) {
-    console.error('Groq API Error:', error);
-    throw error;
-}
-}
-export async function analyzeAiPriceInsights(mainAdData, relatedAdsData ) {
-  const GROQ_API_KEY = process.env.GROQ_API_KEY;
-  
-  if (!GROQ_API_KEY) {
-    throw new Error('GROQ_API_KEY not configured');
-  }
-  const prompt = `Analyze the following main ad data in the context of the related ads data provided.
-
-// Main Ad Data:
-// ${JSON.stringify(mainAdData, null, 2)}
-
-// Related Ads Data:
-// ${JSON.stringify(relatedAdsData, null, 2)}
-
-Pre-Processing Step (execute this FIRST before any other analysis):
-- Scan ALL messages in the chat data and extract every numeric value that represents a price offer made by a buyer.
-- An offer is ONLY valid if a buyer has EXPLICITLY stated a price they are willing to pay (e.g., "I'll give you ₹30,000", "will you take 25000?").
-- The following are NOT offers and must be ignored:
-    * The seller's own listed price
-    * Questions about the price (e.g., "what is your final price?")
-    * General price discussions without a concrete number from the buyer
-    * Implied or inferred prices — only explicit numeric offers count
-- If NO valid offers are found, set HIGHEST OFFER = null and BEST OFFER = null.
-- If at least one valid offer exists, select the MAXIMUM value as HIGHEST OFFER, then evaluate BEST OFFER.
-- CONSTRAINT: The "value" of "Highest Offer" MUST always be >= the "value" of "Best Offer".
-  If your output violates this, you have made an error — recheck and correct before returning.
-
-Analysis Steps:
-1. Parse all provided chat data and ad details before generating any output.
-2. The HIGHEST OFFER is already locked from the Pre-Processing Step — do NOT re-evaluate it.
-3. Identify the BEST OFFER: the most favorable offer considering price, buyer seriousness (e.g., readiness to
-   meet, lack of excessive bargaining, prompt responses), and urgency — this may differ from the highest offer.
-4. Compare the ad's listed price against similar ads in the same category and location; note whether it is
-   overpriced, underpriced, or fairly priced.
-5. Extract location insights from buyer messages (e.g., preferred meetup spots, distance concerns, local demand signals).
-6. Assess buyer sentiment: classify each active buyer as High / Medium / Low interest based on their message
-   tone, frequency, and commitment signals. ALWAYS Flag any red flags  (e.g., lowball patterns, ghosting after price
-   reveal, suspicious urgency, or scam-like behavior) with highest priority.
-7. Weave together the offer values, buyer behavior signals, and any red flags into a concise summary that provides actionable insights to the seller about their pricing strategy and buyer interactions.
-8. ALWAYS prioritize ANY RED FLAGS you identify in the chat data — if a buyer exhibits any suspicious behavior like lowball patterns, ghosting after price reveal, suspicious urgency, or scam-like behavior OR asking for personal information like account details flag them as RED FLAG, this should be clearly highlighted in the summary regardless of their offer value or interest level.
-9. Extract all price-related feedback from buyers (e.g., "too expensive", suggested counter-prices, comparisons
-   to other listings).
-10. Keep all descriptions concise and focused strictly on price insights and buyer sentiment related to price.
-11. The description field must be written in second person ("You have received...", "Your asking price...") 
-   and must weave together the offer value, buyer behavior signals, and any red flags into a single fluid sentence 
-   or two — do not use bullet points inside descriptions,keep it PRECISE and SHORT focusing on RED FLAGS if any.
-12. If HIGHEST OFFER = null, the "Highest Offer" and "Best Offer" objects must use "value": "null" and the 
-    description must clearly state that no explicit offers have been received yet — do NOT fabricate a number.
-
-Output Rules:
-13. Output MUST be a strictly valid JSON object with a single top-level key "summary" whose value is an array
-    of objects, each with exactly three fields: "title" (string), "value" (string), "description" (string).
-14. The "value" field must contain ONLY the raw numeric string (e.g., "40000") or the string "null" if no 
-    offer exists — no currency symbols or commas.
-15. The JSON must have: no trailing commas, no comments, no markdown, no extra text outside the object.
-16. Only include insights that are EXPLICITLY supported by the provided data — do not infer or fabricate.
-17. The output structure must STRICTLY match the format below — include only relevant entries, no additional keys.
-
-Self-Validation (execute this BEFORE returning output):
-- Confirm that every "value" in the output corresponds to a price EXPLICITLY stated by a buyer in the chat.
-- If no such price exists, confirm "value" is "null" for both Highest and Best Offer.
-- If Highest Offer < Best Offer, you have misidentified one or both — re-analyze and correct.
-- Only return output after all three checks pass.
-
-Expected Output Format (with offers):
-{
-    "summary": [
-        {
-            "title": "Highest Offer",
-            "value": "40000",
-            "description": "You have received a highest offer of ₹40,000 from an interested buyer; even though
-            the offer is high, the buyer does not seem genuine as they are not willing to negotiate and are
-            pushing for a quick sale, which appears suspicious."
-        },
-        {
-            "title": "Best Offer",
-            "value": "30000",
-            "description": "You have received a best offer of ₹30,000 from an interested buyer, which is
-            close to your asking price and the buyer seems genuinely interested."
-        }
-    ]
-}
-
-Expected Output Format (no offers):
-{
-    "summary": [
-        {
-            "title": "Highest Offer",
-            "value": "null",
-            "description": "You have not received any explicit price offers yet. Buyers have shown interest
-            but none have committed to a specific price."
-        },
-        {
-            "title": "Best Offer",
-            "value": "null",
-            "description": "No best offer can be determined at this time as no explicit offers have been
-            received from buyers."
-        }
-    ]
-}
-
-
-Now provide the analysis in the specified STRICT JSON format to only include the Highest and Best Offer:`;
+  "type": "<CLASSIFICATION_TYPE>",
+  "fraudIndicators": ["<observed signal>", ...],
+  "recommendations": "<one concise actionable sentence — omit this field entirely if type is SAFE>"
+}`;
 
   try {
-    console.log("price")
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -613,21 +423,11 @@ Now provide the analysis in the specified STRICT JSON format to only include the
       body: JSON.stringify({
         model: "llama-3.3-70b-versatile",
         messages: [
-          {
-            role: "system",
-            content: `You are an expert at analyzing classified ads data. 
-You analyze the provided mainAdData with the relatedAdsData and return the highest offer and best offer received along with a concise description, compare the price of the main ad with similar ads in the same category and location, analyze the chat data for any location insights based on buyer interactions, analyze the chat data for buyer sentiment and interest level, and analyze the chat data for any price-related feedback from potential buyers.
-Always respond with valid JSON only, no explanation or additional text. return ONLY relevant key-value pairs as JSON. 
-Never include fields with "Not specified" or empty values.
-Always respond with valid JSON ONLY.`
-          },
-          {
-            role: "user",
-            content: prompt
-          }
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
         ],
-        temperature: 0.2,
-        max_tokens: 1000
+        temperature: 0.1,
+        max_tokens: 400
       })
     });
 
@@ -636,19 +436,119 @@ Always respond with valid JSON ONLY.`
       throw new Error(`Groq API error: ${errorData.error?.message || response.statusText}`);
     }
 
-const data = await response.json();
-const aiResponse = data.choices[0].message.content;
+    const data = await response.json();
+    const aiResponse = data.choices[0].message.content;
 
-// Extract JSON from response using regex
-const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-if (!jsonMatch) {
-  throw new Error('No valid JSON in AI response');
+    const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('No valid JSON in AI response');
+
+    const parsed = JSON.parse(jsonMatch[0]);
+
+    // Post-processing: ensure shape is always consistent
+    return {
+      type: parsed.type ?? "SAFE",
+      fraudIndicators: Array.isArray(parsed.fraudIndicators) ? parsed.fraudIndicators : [],
+      ...(parsed.recommendations ? { recommendations: parsed.recommendations } : {})
+    };
+
+  } catch (error) {
+    console.error('Groq API Error:', error);
+    throw error;
+  }
+}
+export async function analyzeAiPriceInsights(mainAdData, relatedAdsData) {
+  const GROQ_API_KEY = process.env.GROQ_API_KEY;
+  if (!GROQ_API_KEY) throw new Error('GROQ_API_KEY not configured');
+
+  const systemPrompt = `You are a classified ads analyst. Your ONLY job is to extract buyer offers from chat data and return a strict JSON object.
+
+OFFER EXTRACTION RULES (non-negotiable):
+- A valid offer = a buyer explicitly states a numeric price they will pay (e.g. "I'll pay ₹30,000", "will you take 25k?")
+- NOT valid: seller's listed price, price questions, general price talk, implied/inferred prices
+- If zero valid offers exist → both values MUST be "null"
+- HIGHEST OFFER = the maximum valid offer found
+- BEST OFFER = most favorable offer (weighing price + buyer seriousness + urgency) — can differ from highest
+- INVARIANT: Highest Offer value >= Best Offer value. If violated, you have an error — fix before returning.
+
+RED FLAG PRIORITY: If any buyer shows suspicious behavior (lowball patterns, ghosting after price reveal, requesting account/personal info, fake urgency, scam signals) — this MUST be highlighted in the description regardless of offer size.
+
+OUTPUT: Return ONLY this JSON, nothing else:
+{
+  "summary": [
+    {
+      "title": "Highest Offer",
+      "value": "<numeric string or null>",
+      "description": "<1–2 sentences, second person, highlights red flags if any>"
+    },
+    {
+      "title": "Best Offer",
+      "value": "<numeric string or null>",
+      "description": "<1–2 sentences, second person, highlights red flags if any>"
+    }
+  ]
 }
 
-const validJSON = JSON.parse(jsonMatch[0]);
+Rules: value = raw number only (e.g. "40000"), no ₹ symbol, no commas, no markdown, no extra text.`;
 
-return validJSON;
+  const userPrompt = `Analyze the main ad and its chat data against the related ads below.
 
+MAIN AD:
+${JSON.stringify(mainAdData, null, 2)}
+
+RELATED ADS:
+${JSON.stringify(relatedAdsData, null, 2)}
+
+Steps:
+1. Scan ALL chat messages. Extract only explicit buyer price offers.
+2. Identify Highest Offer (max value) and Best Offer (best overall considering seriousness + urgency).
+3. Verify: Highest Offer >= Best Offer. If not, re-analyze.
+4. Check for red flags in buyer behavior — flag in description if found.
+5. Return ONLY the JSON. No explanation, no markdown.`;
+
+  try {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        temperature: 0.1, // lower = more deterministic
+        max_tokens: 600
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`Groq API error: ${errorData.error?.message || response.statusText}`);
+    }
+
+    const data = await response.json();
+    const aiResponse = data.choices[0].message.content;
+
+    const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('No valid JSON in AI response');
+
+    const parsed = JSON.parse(jsonMatch[0]);
+
+    // Post-processing safety check: enforce Highest >= Best
+    const summary = parsed?.summary ?? [];
+    const highest = summary.find(s => s.title === "Highest Offer");
+    const best = summary.find(s => s.title === "Best Offer");
+
+    if (highest && best && highest.value !== "null" && best.value !== "null") {
+      if (Number(best.value) > Number(highest.value)) {
+        // Swap the values if model got it backwards
+        [highest.value, best.value] = [best.value, highest.value];
+      }
+    }
+
+    return parsed;
   } catch (error) {
     console.error('Groq API Error:', error);
     throw error;
