@@ -573,7 +573,9 @@ Rules:
 - Sound natural and human, like someone casually selling their item
 - 2-3 sentences max
 - No exaggerated claims, buzzwords, or salesy language
-- If the original is already decent, make only minimal changes`;
+- If the original is already decent, make only minimal changes
+- Output ONLY the final description text. No notes, explanations, labels, or extra commentary of any kind.`;
+
 
   try {
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
