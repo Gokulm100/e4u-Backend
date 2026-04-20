@@ -554,3 +554,57 @@ Steps:
     throw error;
   }
 }
+export async function generateDescription({ title, category, subCategory, description }) {
+  const GROQ_API_KEY = process.env.GROQ_API_KEY;
+  
+  if (!GROQ_API_KEY) {
+    throw new Error('GROQ_API_KEY not configured');
+  }
+
+  const prompt = `Clean up and lightly improve this classified ad description. Fix grammar and flow, but keep it sounding like a real person wrote it — not a marketing pitch.
+
+Title: ${title}
+Category: ${category}
+Sub-category: ${subCategory}
+Original description: ${description}
+
+Rules:
+- Keep the same meaning and facts from the original
+- Sound natural and human, like someone casually selling their item
+- 2-3 sentences max
+- No exaggerated claims, buzzwords, or salesy language
+- If the original is already decent, make only minimal changes`;
+
+  try {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        temperature: 0.4, // lower = less creative/random, more grounded
+        max_tokens: 150
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`Groq API error: ${errorData.error?.message || response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data.choices[0].message.content.trim();
+
+  } catch (error) {
+    console.error('Groq API Error:', error);
+    throw error;
+  }
+}

@@ -2,7 +2,7 @@ import Chat from "../models/chat.model.js";
 import Ad from "../models/ad.model.js";
 import User from "../models/user.model.js";
 import AdCategory from "../models/ad.category.model.js";
-import {analyzeDescription,aiSearchAds,analyzeChatForFraud} from "../aiAnalyzer/aiAnalyzer.js";
+import {analyzeDescription,aiSearchAds,analyzeChatForFraud,generateDescription} from "../aiAnalyzer/aiAnalyzer.js";
 import { sendChatNotification } from "../services/pushService.js";
 import mongoose from "mongoose";
 
@@ -625,6 +625,44 @@ export const summarizeAdUsingAi = async (req, res) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to generate AI summary',
+      message: error.message
+    });
+  }
+};
+export const generateDescriptionUsingAI = async (req, res) => {
+  try {
+    const { title, category, subCategory, description } = req.body;
+
+    // Validation
+    if (!title || !category ) {
+      return res.status(400).json({
+        success: false,
+        error: 'Ad title, category, and description are required'
+      });
+    }
+
+    // Generate AI description
+    console.log('🤖 Generating description...');
+    const aiDescription = await generateDescription({
+      title,
+      category,
+      subCategory,
+      description
+    });
+
+    console.log('✅ AI description generated successfully');
+
+    return res.json({
+      success: true,
+      data: aiDescription
+    });
+
+  } catch (error) {
+    console.error('❌ Error:', error);
+    
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to generate AI description',
       message: error.message
     });
   }
