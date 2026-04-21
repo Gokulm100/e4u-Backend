@@ -141,8 +141,8 @@ export const getChats = async (req, res) => {
       { path: "to", select: "name email" }
     ])
     .sort({ createdAt: 1 });
-    console.log(currentUser)
-    const filteredChats = chats.filter(chat => chat.from.name !== currentUser);
+    const filteredChats = chats.filter(chat => chat.from._id !== req.user.id);
+    console.log("Filtered Chats:", filteredChats);
     const fraudCheck = await analyzeChatForFraud(filteredChats);
     res.json({ chats, fraudCheck });
   } catch (err) {
@@ -746,6 +746,7 @@ export const markAdAsSold = async (req, res) => {
 
     ad.isSold = true;
     ad.soldTo = buyerId || null;
+    ad.sellingPrice = ad.amount; // Optionally store the selling price
     await ad.save();
 
     return res.json({ message: "Success" });
