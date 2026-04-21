@@ -141,7 +141,7 @@ export const getChats = async (req, res) => {
       { path: "to", select: "name email" }
     ])
     .sort({ createdAt: 1 });
-    const filteredChats = chats.filter(chat => chat.from._id !== req.user.id);
+    const filteredChats = chats.filter(chat => chat.from._id != req.user.id);
     console.log("Filtered Chats:", filteredChats);
     const fraudCheck = await analyzeChatForFraud(filteredChats);
     res.json({ chats, fraudCheck });
