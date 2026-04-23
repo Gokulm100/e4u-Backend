@@ -1,5 +1,6 @@
 import User from "../models/user.model.js";
 import ConsentVersion from "../models/consentVersion.model.js";
+import Location from "../models/locations.model.js";
 import Consent from "../models/consent.model.js";
 import { OAuth2Client } from "google-auth-library";
 import jwt from "jsonwebtoken";
@@ -166,3 +167,38 @@ export const reportUser = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 }
+export const updateLocations = async (req, res) => {
+  try {
+    let primaryLocation = req.body.primaryLocation;
+    if(!primaryLocation) {
+      return res.status(400).json({ message: "Primary location is required" });
+    }
+    let subLocation= req.body.subLocation;
+    let sublocations = req.body.sublocations;
+    if(subLocation) {
+      await Location.findOneAndUpdate(
+        { name: primaryLocation },
+        { $addToSet: { subLocations: subLocation } },
+        { upsert: true, new: true }
+      );
+    }else 
+    if(sublocations) {
+      await Location.findOneAndUpdate(
+        { name: primaryLocation },
+        { $set: { subLocations: sublocations } },
+        { upsert: true, new: true }
+      );
+    }
+    res.json({ message: "Locations updated successfully" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+}
+export const getLocations = async (req, res) => {
+  try {
+    const locations = await Location.find();
+    res.json({ data: locations });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
