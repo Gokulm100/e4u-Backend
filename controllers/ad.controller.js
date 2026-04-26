@@ -420,20 +420,13 @@ export const getAllAds = async (req, res) => {
     const limit = parseInt(req.body.limit, 10) || 10;
     const skip = (page - 1) * limit;
     const searchQuery = req.body.search || '';
-    const categoryName = req.body.category || null;
+    const categoryId = req.body.category || null;
     const subCategory = req.body.subCategory || null;
     const userId = req.body?.userId || null;
     const aiSearch = req.body?.aiSearch || false;
     console.log(userId)
     let filter = {};
     // Resolve category name to ObjectId if provided
-    let categoryId = null;
-    if (categoryName) {
-      const categoryDoc = await AdCategory.findOne({ name: categoryName });
-      if (categoryDoc) {
-        categoryId = categoryDoc._id;
-      }
-    }
     if(!aiSearch){
         // Build filter
         filter = {
