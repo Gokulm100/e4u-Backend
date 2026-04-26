@@ -442,7 +442,13 @@ Return ONLY this JSON structure:
     const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('No valid JSON in AI response');
 
-    const parsed = JSON.parse(jsonMatch[0]);
+    let parsed = {};
+    try {
+      parsed = JSON.parse(jsonMatch[0]);
+    } catch (parseError) {
+      console.error('Failed to parse AI response JSON:', parseError);
+      return {};
+    }
 
     // Post-processing: ensure shape is always consistent
     return {

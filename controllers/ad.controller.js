@@ -4,6 +4,7 @@ import User from "../models/user.model.js";
 import AdCategory from "../models/ad.category.model.js";
 import {analyzeDescription,aiSearchAds,analyzeChatForFraud,generateDescription} from "../aiAnalyzer/aiAnalyzer.js";
 import { sendChatNotification } from "../services/pushService.js";
+import { getSocket } from "../socket.js";
 import mongoose from "mongoose";
 
 
@@ -337,8 +338,13 @@ export const createChat = async (req, res) => {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    // Create chat message
+    // Create and populate chat message for API and socket payload.
     const chat = await Chat.create({ adId, message, to, from });
+    const populatedChat = await Chat.findById(chat._id).populate([
+      { path: "from", select: "name email avatar" },
+      { path: "to", select: "name email avatar" },
+      { path: "adId", select: "title seller images" }
+    ]);
 
     // Add sender to usersInterested if not the seller
     const ad = await Ad.findById(adId).select("seller usersInterested");
@@ -358,7 +364,16 @@ export const createChat = async (req, res) => {
       }
     }).catch(console.error);
 
-    res.status(201).json(chat);
+    const io = getSocket();
+    if (io) {
+      const eventPayload = {
+        chat: populatedChat || chat,
+      };
+      io.to(`user:${to}`).emit("chat:new-message", eventPayload);
+      io.to(`user:${from}`).emit("chat:new-message", eventPayload);
+    }
+
+    res.status(201).json(populatedChat || chat);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

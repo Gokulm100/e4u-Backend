@@ -2,9 +2,11 @@ console.log("Server file loaded");
 
 console.log("Server file loaded");
 import express from "express";
+import http from "http";
 import dotenv from "dotenv";
 import cors from "cors";
 import connectDB from "./config/db.js";
+import { initSocket } from "./socket.js";
 
 import userRoutes from "./routes/user.routes.js";
 import adRoutes from "./routes/ad.routes.js";
@@ -15,6 +17,7 @@ dotenv.config();
 connectDB();
 
 const app = express();
+const server = http.createServer(app);
 
 app.use(cors());
 app.use(express.json());
@@ -34,5 +37,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/ads", adRoutes);
 app.use("/api/ai", aiRoutes);
 
+initSocket(server);
+
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
