@@ -807,8 +807,11 @@ export const enableAd = async (req, res) => {
 }
   const formatDate = (date) => {
         if (!date) return '';
-        const d = new Date(date);
-        const now = new Date();
+        const toISTDate = (value) =>
+          new Date(new Date(value).toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+
+        const d = toISTDate(date);
+        const now = toISTDate(new Date());
         const isToday = d.toDateString() === now.toDateString();
         const yesterday = new Date(now);
         yesterday.setDate(now.getDate() - 1);
