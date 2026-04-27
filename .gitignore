@@ -21,3 +21,5 @@ coverage/
 
 # Optional: VSCode settings
 .vscode/
+.env
+.env.*
