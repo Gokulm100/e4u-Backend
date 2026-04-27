@@ -4,15 +4,19 @@ import authMiddleware from "../middleware/auth.js";
 import fileUpload from "../middleware/fileUpload.js";
 
 const router = express.Router();
+const trackUploadRequestStart = (req, res, next) => {
+  req.uploadRequestStartAt = Date.now();
+  next();
+};
 
 router.get("/listCategories", getAllAdCategories);
 router.post("/listUserAds", getUserAds);
 router.post("/", getAllAds);
-router.post("/postAdd", authMiddleware, fileUpload.array('images', 5), createAd);
+router.post("/postAdd", trackUploadRequestStart, authMiddleware, fileUpload.array('images', 5), createAd);
 router.get("/chat",authMiddleware, getChats);
 router.get("/:id", getAdById);
 router.delete("/:id", authMiddleware, deleteAd);
-router.put("/edit/:id", authMiddleware, fileUpload.array('images', 5), editAd);
+router.put("/edit/:id", trackUploadRequestStart, authMiddleware, fileUpload.array('images', 5), editAd);
 router.post("/chat",authMiddleware, createChat);
 router.post("/latestMessages", authMiddleware, getLatestMessages);
 router.post("/getUserMessages", authMiddleware, getUserMessages);

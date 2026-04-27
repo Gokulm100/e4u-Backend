@@ -379,6 +379,8 @@ export const createChat = async (req, res) => {
   }
 };
 export const editAd = async (req, res) => {
+  const requestStart = req.uploadRequestStartAt || Date.now();
+  const controllerStart = Date.now();
   try {
     // console.log("[PUT] /api/ads/edit/:id - Body:", req.body);
     const adId = req.params.id;
@@ -395,12 +397,20 @@ export const editAd = async (req, res) => {
     // Update the ad
     const updatedAd = await Ad.findByIdAndUpdate(adId, updateData, { new: true });
     if (!updatedAd) return res.status(404).json({ message: "Ad not found" });
+    const controllerMs = Date.now() - controllerStart;
+    const totalMs = Date.now() - requestStart;
+    console.log(`[PUT] /api/ads/edit/${adId} - files=${req.files?.length || 0} controllerMs=${controllerMs} totalMs=${totalMs}`);
     res.json(updatedAd);
   } catch (err) {
+    const controllerMs = Date.now() - controllerStart;
+    const totalMs = Date.now() - requestStart;
+    console.error(`[PUT] /api/ads/edit/${req.params.id} - failed controllerMs=${controllerMs} totalMs=${totalMs}`, err);
     res.status(500).json({ message: err.message });
   }
 };
 export const createAd = async (req, res) => {
+  const requestStart = req.uploadRequestStartAt || Date.now();
+  const controllerStart = Date.now();
   try {
     console.log("[POST] /api/ads/postAdd - Body:", req.body);
     console.log("[POST] /api/ads/postAdd - Files:", req.files);
@@ -421,8 +431,14 @@ export const createAd = async (req, res) => {
       seller: req.user?.id,
       posted: new Date()
     });
+    const controllerMs = Date.now() - controllerStart;
+    const totalMs = Date.now() - requestStart;
+    console.log(`[POST] /api/ads/postAdd - files=${req.files?.length || 0} controllerMs=${controllerMs} totalMs=${totalMs}`);
     res.status(201).json(ad);
   } catch (err) {
+    const controllerMs = Date.now() - controllerStart;
+    const totalMs = Date.now() - requestStart;
+    console.error(`[POST] /api/ads/postAdd - failed controllerMs=${controllerMs} totalMs=${totalMs}`, err);
     console.error("[POST] /api/ads/postAdd - Error:", err);
     res.status(500).json({ message: err.message });
   }

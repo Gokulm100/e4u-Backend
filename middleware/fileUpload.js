@@ -22,8 +22,10 @@ const storage = new CloudinaryStorage({
             allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
             transformation: [
                 {
-                    quality: 'auto:good',
-                    fetch_format: 'auto'
+                    quality: 'auto:eco',
+                    width: 1600,
+                    height: 1600,
+                    crop: 'limit'
                 }
             ]
         };
