@@ -19,7 +19,13 @@ const storage = new CloudinaryStorage({
         return {
             folder: process.env.CLOUDINARY_FOLDER || 'e4you',
             resource_type: 'image',
-            allowed_formats: ['jpg', 'jpeg', 'png', 'webp']
+            allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+            transformation: [
+                {
+                    quality: 'auto:good',
+                    fetch_format: 'auto'
+                }
+            ]
         };
     }
 });
@@ -32,6 +38,12 @@ const fileFilter = (req, file, cb) => {
     }
 };
 
-const upload = multer({ storage, fileFilter });
+const upload = multer({
+    storage,
+    fileFilter,
+    limits: {
+        files: 5
+    }
+});
 
 export default upload;
