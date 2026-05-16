@@ -36,8 +36,8 @@ export const loginUser = async (req, res) => {
     const payload = ticket.getPayload();
     const { sub, name, email, picture } = payload;
 
-    // Find or create user
-    let user = await User.findOne({ googleId: sub });
+    // Find or create user, and populate lastViewedAds
+    let user = await User.findOne({ googleId: sub }).populate('lastViewedAds');
     if (!user) {
       user = await User.create({
         googleId: sub,
@@ -45,16 +45,18 @@ export const loginUser = async (req, res) => {
         email,
         profilePic: picture,
       });
+      // Fetch again to populate lastViewedAds (should be empty on creation)
+      user = await User.findById(user._id).populate('lastViewedAds');
     } else {
       user.lastLogin = new Date();
       await user.save();
+      user = await User.findById(user._id).populate('lastViewedAds');
     }
     console.log("User logged in:", user);
     // Generate JWT for your app
     const appToken = jwt.sign({ id: user._id, email: user.email, name: user.name }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
-
     res.json({ token: appToken, user });
   } catch (err) {
     console.error("Google login error:", err);
