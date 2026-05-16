@@ -52,6 +52,12 @@ const userSchema = new mongoose.Schema(
         ref: "Ad",
       },
     ],
+    favoriteAds: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Ad",
+      },
+    ],
   },
   { versionKey: false }
 );

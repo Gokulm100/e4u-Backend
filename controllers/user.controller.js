@@ -1,3 +1,5 @@
+
+import Ad from "../models/ad.model.js";
 import User from "../models/user.model.js";
 import ConsentVersion from "../models/consentVersion.model.js";
 import Location from "../models/locations.model.js";
@@ -200,6 +202,67 @@ export const getLocations = async (req, res) => {
   try {
     const locations = await Location.find();
     res.json({ data: locations });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+// Add an ad to user's favorites
+export const addToFavorites = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { adId } = req.body;
+    if (!adId) {
+      return res.status(400).json({ message: "adId is required" });
+    }
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    if (user.favoriteAds.includes(adId)) {
+      return res.status(400).json({ message: "Ad already in favorites" });
+    }
+    user.favoriteAds.push(adId);
+    await user.save();
+    res.json({ message: "Ad added to favorites" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+// Fetch favorite ads for a user
+export const getFavoriteAds = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId).populate({
+      path: "favoriteAds",
+      populate: { path: "category", model: "AdCategory" },
+    });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    res.json({ favoriteAds: user.favoriteAds });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+// Remove an ad from user's favorites
+export const removeFromFavorites = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { adId } = req.body;
+    if (!adId) {
+      return res.status(400).json({ message: "adId is required" });
+    }
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    const index = user.favoriteAds.indexOf(adId);
+    if (index === -1) {
+      return res.status(400).json({ message: "Ad not in favorites" });
+    }
+    user.favoriteAds.splice(index, 1);
+    await user.save();
+    res.json({ message: "Ad removed from favorites" });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

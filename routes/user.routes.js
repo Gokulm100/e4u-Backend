@@ -1,5 +1,5 @@
 import express from "express";
-import { registerUser, loginUser,getLatestConsentVersion,acceptConsent,revokeConsent,reportUser,updateLocations,getLocations} from "../controllers/user.controller.js";
+import { registerUser, loginUser,getLatestConsentVersion,acceptConsent,revokeConsent,reportUser,updateLocations,getLocations, getFavoriteAds, addToFavorites,removeFromFavorites } from "../controllers/user.controller.js";
 import authMiddleware from "../middleware/auth.js";
 import { saveFcmToken } from "../controllers/user.controller.js";
 const router = express.Router();
@@ -16,5 +16,7 @@ router.post("/revokeConsent", authMiddleware, revokeConsent);
 router.post("/reportUser", authMiddleware, reportUser);
 router.post("/locations", updateLocations);
 router.get("/locations", getLocations);
-
+router.get("/favorite-ads", authMiddleware, getFavoriteAds);
+router.post("/add-to-favorites", authMiddleware, addToFavorites);
+router.post("/remove-from-favorites", authMiddleware, removeFromFavorites);
 export default router;
