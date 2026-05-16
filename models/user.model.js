@@ -46,6 +46,12 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    lastViewedAds: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Ad",
+      },
+    ],
   },
   { versionKey: false }
 );

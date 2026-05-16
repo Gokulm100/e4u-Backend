@@ -725,6 +725,7 @@ export const markMessagesAsSeen = async (req, res) => {
 export const incrementViews = async (req, res) => {
   try {
     const { adId } = req.body;
+    const userId = req.user?.id;
     if (!adId) {
       return res.status(400).json({ message: "adId is required" });
     }
@@ -734,6 +735,18 @@ export const incrementViews = async (req, res) => {
     }
     ad.views = (ad.views || 0) + 1;
     await ad.save();
+
+    if (userId) {
+      const user = await User.findById(userId);
+      if (user) {
+        user.lastViewedAds = user.lastViewedAds || [];
+        if (!user.lastViewedAds.includes(adId)) {
+          user.lastViewedAds.push(adId);
+          await user.save();
+        }
+      }
+    }
+
     return res.json({ message: "View count incremented", views: ad.views });
   } catch (error) {
     console.error("Error counting views:", error);
