@@ -1,6 +1,7 @@
 
 import Ad from "../models/ad.model.js";
 import User from "../models/user.model.js";
+import Report from "../models/report.model.js";
 import ConsentVersion from "../models/consentVersion.model.js";
 import Location from "../models/locations.model.js";
 import Consent from "../models/consent.model.js";
@@ -159,9 +160,14 @@ export const reportUser = async (req, res) => {
       return res.status(404).json({ message: "Reported user not found" });
     }
 
+    await Report.create({
+      reporter: req.user.id,
+      reportedUser: reportedUserId,
+    });
+
     reportedUser.reportCounter += 1;
-    if(reportedUser.reportCounter >= 5){
-      reportedUser.isActive = false; // Deactivate user after 5 reports
+    if (reportedUser.reportCounter >= 5) {
+      reportedUser.isActive = false;
       reportedUser.isBlocked = true;
     }
     await reportedUser.save();
@@ -170,7 +176,8 @@ export const reportUser = async (req, res) => {
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
-}
+};
+
 export const updateLocations = async (req, res) => {
   try {
     let primaryLocation = req.body.primaryLocation;

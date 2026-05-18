@@ -1,5 +1,5 @@
 import express from "express";
-import { registerUser, loginUser,getLatestConsentVersion,acceptConsent,revokeConsent,reportUser,updateLocations,getLocations, getFavoriteAds, addToFavorites,removeFromFavorites } from "../controllers/user.controller.js";
+import { registerUser, loginUser, getLatestConsentVersion, acceptConsent, revokeConsent, reportUser, updateLocations, getLocations, getFavoriteAds, addToFavorites, removeFromFavorites } from "../controllers/user.controller.js";
 import authMiddleware from "../middleware/auth.js";
 import { saveFcmToken } from "../controllers/user.controller.js";
 const router = express.Router();
