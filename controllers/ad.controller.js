@@ -2,6 +2,7 @@ import Chat from "../models/chat.model.js";
 import Ad from "../models/ad.model.js";
 import User from "../models/user.model.js";
 import AdCategory from "../models/ad.category.model.js";
+import Location from "../models/locations.model.js";
 import {analyzeDescription,aiSearchAds,analyzeChatForFraud,generateDescription} from "../aiAnalyzer/aiAnalyzer.js";
 import { sendChatNotification } from "../services/pushService.js";
 import { getSocket } from "../socket.js";
@@ -460,6 +461,33 @@ export const createAd = async (req, res) => {
   }
 };
 
+const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const buildLocationFilter = async (locationId, locationText) => {
+  if (locationId) {
+    if (!mongoose.Types.ObjectId.isValid(locationId)) {
+      return { notFound: true };
+    }
+    const locationDoc = await Location.findById(locationId);
+    if (!locationDoc) {
+      return { notFound: true };
+    }
+    const exactValues = new Set([locationDoc.name]);
+    for (const sub of locationDoc.subLocations || []) {
+      exactValues.add(sub);
+      exactValues.add(`${locationDoc.name}, ${sub}`);
+    }
+    if (locationText?.trim()) {
+      exactValues.add(locationText.trim());
+    }
+    return { location: { $in: [...exactValues] } };
+  }
+  if (locationText?.trim()) {
+    return { location: { $regex: escapeRegex(locationText.trim()), $options: "i" } };
+  }
+  return {};
+};
+
 export const getAllAds = async (req, res) => {
   try {
     // Pagination params
@@ -471,6 +499,10 @@ export const getAllAds = async (req, res) => {
     const subCategory = req.body.subCategory || null;
     const userId = req.body?.userId || null;
     const aiSearch = req.body?.aiSearch || false;
+    const locationId = req.body.locationId || null;
+    const locationText = req.body.location || null;
+    const priceMin = req.body.priceMin != null ? Number(req.body.priceMin) : null;
+    const priceMax = req.body.priceMax != null ? Number(req.body.priceMax) : null;
     console.log(userId)
     let filter = {};
     // Resolve category name to ObjectId if provided
@@ -491,6 +523,25 @@ export const getAllAds = async (req, res) => {
     if (userId) {
       filter.seller = { $ne: userId };
     }
+
+    const locationFilter = await buildLocationFilter(locationId, locationText);
+    if (locationFilter.notFound) {
+      return res.json({ ads: [], page, limit, total: 0, totalPages: 0, hasMore: false });
+    }
+    if (locationFilter.location) {
+      filter.location = locationFilter.location;
+    }
+
+    if (priceMin != null && !Number.isNaN(priceMin) || priceMax != null && !Number.isNaN(priceMax)) {
+      filter.price = {};
+      if (priceMin != null && !Number.isNaN(priceMin)) {
+        filter.price.$gte = priceMin;
+      }
+      if (priceMax != null && !Number.isNaN(priceMax)) {
+        filter.price.$lte = priceMax;
+      }
+    }
+
     filter.isSold = false;
     filter.isActive = true;
     // Total count with same filter
@@ -545,12 +596,14 @@ export const getAllAds = async (req, res) => {
       aiResult.totalPages = Math.ceil(aiResult.total / limit);
       res.json(aiResult);
     } else {
+      const totalPages = Math.ceil(total / limit);
       res.json({
         ads,
         page,
         limit,
         total,
-        totalPages: Math.ceil(total / limit)
+        totalPages,
+        hasMore: page < totalPages,
       });
     }
 
