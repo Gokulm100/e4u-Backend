@@ -2,7 +2,6 @@ import Chat from "../models/chat.model.js";
 import Ad from "../models/ad.model.js";
 import User from "../models/user.model.js";
 import AdCategory from "../models/ad.category.model.js";
-import Location from "../models/locations.model.js";
 import {analyzeDescription,aiSearchAds,analyzeChatForFraud,generateDescription} from "../aiAnalyzer/aiAnalyzer.js";
 import { sendChatNotification } from "../services/pushService.js";
 import { getSocket } from "../socket.js";
@@ -463,24 +462,11 @@ export const createAd = async (req, res) => {
 
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-const buildLocationFilter = async (locationId, locationText) => {
-  let searchString = locationText?.trim() || null;
-
-  if (!searchString && locationId) {
-    if (!mongoose.Types.ObjectId.isValid(locationId)) {
-      return { notFound: true };
-    }
-    const locationDoc = await Location.findById(locationId);
-    if (!locationDoc) {
-      return { notFound: true };
-    }
-    searchString = locationDoc.name;
-  }
-
+const buildLocationFilter = (locationText) => {
+  const searchString = locationText?.trim();
   if (!searchString) {
     return {};
   }
-
   return { location: { $regex: escapeRegex(searchString), $options: "i" } };
 };
 
@@ -495,7 +481,6 @@ export const getAllAds = async (req, res) => {
     const subCategory = req.body.subCategory || null;
     const userId = req.body?.userId || null;
     const aiSearch = req.body?.aiSearch || false;
-    const locationId = req.body.locationId || null;
     const locationText = req.body.location || null;
     const priceMin = req.body.priceMin != null ? Number(req.body.priceMin) : null;
     const priceMax = req.body.priceMax != null ? Number(req.body.priceMax) : null;
@@ -520,10 +505,7 @@ export const getAllAds = async (req, res) => {
       filter.seller = { $ne: userId };
     }
 
-    const locationFilter = await buildLocationFilter(locationId, locationText);
-    if (locationFilter.notFound) {
-      return res.json({ ads: [], page, limit, total: 0, totalPages: 0, hasMore: false });
-    }
+    const locationFilter = buildLocationFilter(locationText);
     if (locationFilter.location) {
       filter.location = locationFilter.location;
     }
