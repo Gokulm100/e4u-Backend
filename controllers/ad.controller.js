@@ -175,6 +175,7 @@ export const getSellingMessages = async (req, res) => {
       {
       $group: {
         _id: { adId: "$adId", buyer: { $cond: [ { $eq: ["$from", currentUserId] }, "$to", "$from" ] } },
+        latestMessageId: { $first: "$_id" },
         message: { $first: "$message" },
         createdAt: { $first: "$createdAt" },
         seenAt: { $first: "$seenAt" },
@@ -187,6 +188,7 @@ export const getSellingMessages = async (req, res) => {
       $project: {
         adId: 1,
         buyer: "$_id.buyer",
+        latestMessageId: 1,
         message: 1,
         createdAt: 1,
         seenAt: 1,
@@ -196,7 +198,7 @@ export const getSellingMessages = async (req, res) => {
       }
       },
       {
-      $sort: { createdAt: -1, adId: 1, buyer: 1 } // Final sort for consistent order
+      $sort: { createdAt: -1, latestMessageId: -1, adId: 1, buyer: 1 } // Final sort for consistent order
       }
     ]);
     // console.log(messages)
@@ -216,10 +218,15 @@ export const getSellingMessages = async (req, res) => {
       // Helper to format date as "18 JAN 2025 10:02 AM"
     
 
+      const buyerId = (msg.to?._id?.toString() === msg.adId?.seller?.toString())
+        ? msg.from?._id?.toString()
+        : msg.to?._id?.toString();
+
       return {
-        id: idx + 1,
+        id: msg.latestMessageId?.toString() || `${msg.adId?._id?.toString() || ''}:${buyerId || ''}`,
+        latestMessageId: msg.latestMessageId?.toString() || '',
         adId: msg.adId?._id || '',
-        buyerId: (msg.to?._id?.toString() === msg.adId?.seller?.toString()) ? msg.from?._id?.toString() : msg.to?._id?.toString(),
+        buyerId,
         sellerId: msg.adId?.seller?.toString() || '',
         buyerName: (msg.to?._id?.toString() === currentUserId.toString())
         ? (msg.from?.name || '')
@@ -228,6 +235,7 @@ export const getSellingMessages = async (req, res) => {
         lastMessage: msg.message,
         isSeen: msg.seenAt ? true : false,
         lastMessageFrom: msg.from?._id?.toString(),
+        createdAt: msg.createdAt || null,
         seenAt: msg.seenAt ? formatDate(msg.seenAt) : '',
         time: msg.createdAt ? formatDate(msg.createdAt) : '',
         avatar: msg.to?.avatar || 'https://randomuser.me/api/portraits/men/1.jpg'
