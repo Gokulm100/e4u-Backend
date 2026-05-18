@@ -28,6 +28,7 @@ export const setUserActive = async (req, res) => {
     user.isActive = isActive;
     if (isActive) {
       user.isBlocked = false;
+      user.reportCounter = 0;
     }
     await user.save();
 
