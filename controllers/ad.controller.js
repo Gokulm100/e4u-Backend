@@ -240,6 +240,12 @@ export const getSellingMessages = async (req, res) => {
         time: msg.createdAt ? formatDate(msg.createdAt) : '',
         avatar: msg.to?.avatar || 'https://randomuser.me/api/portraits/men/1.jpg'
       };
+      })
+      .sort((a, b) => {
+        const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        if (bCreated !== aCreated) return bCreated - aCreated;
+        return (b.latestMessageId || "").localeCompare(a.latestMessageId || "");
       });
     const count = filteredMessages.length;
     res.json({ filteredMessages, count });
