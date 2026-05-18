@@ -11,6 +11,7 @@ import { initSocket } from "./socket.js";
 import userRoutes from "./routes/user.routes.js";
 import adRoutes from "./routes/ad.routes.js";
 import aiRoutes from "./routes/ai.routes.js";
+import adminRoutes from "./routes/admin.routes.js";
 
 
 dotenv.config();
@@ -36,6 +37,7 @@ app.use((req, res, next) => {
 app.use("/api/users", userRoutes);
 app.use("/api/ads", adRoutes);
 app.use("/api/ai", aiRoutes);
+app.use("/api/admin", adminRoutes);
 
 initSocket(server);
 
