@@ -198,7 +198,7 @@ export const getSellingMessages = async (req, res) => {
       }
       },
       {
-      $sort: { createdAt: -1, latestMessageId: -1, adId: 1, buyer: 1 } // Final sort for consistent order
+      $sort: { latestMessageId: -1, createdAt: -1, adId: 1, buyer: 1 } // Final sort for consistent order
       }
     ]);
     // console.log(messages)
@@ -210,7 +210,6 @@ export const getSellingMessages = async (req, res) => {
       { path: "to", select: "name email" },
       { path: "adId", model: "Ad", match: { seller: currentUserId }, select: "title seller" }
     ]);
-    console.log("populatedMessages", populatedMessages)
     // Filter out messages where adId is null (i.e., ad seller is not current user)
     const filteredMessages = populatedMessages
       .filter(msg => msg.adId)
@@ -241,12 +240,7 @@ export const getSellingMessages = async (req, res) => {
         avatar: msg.to?.avatar || 'https://randomuser.me/api/portraits/men/1.jpg'
       };
       })
-      .sort((a, b) => {
-        const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        if (bCreated !== aCreated) return bCreated - aCreated;
-        return (b.latestMessageId || "").localeCompare(a.latestMessageId || "");
-      });
+      .sort((a, b) => (b.latestMessageId || "").localeCompare(a.latestMessageId || ""));
     const count = filteredMessages.length;
     res.json({ filteredMessages, count });
   } catch (err) {
@@ -275,7 +269,7 @@ export const getBuyingMessages = async (req, res) => {
       }
       },
       {
-      $sort: { createdAt: -1 }
+      $sort: { createdAt: -1, _id: -1 }
       },
       {
       $group: {
@@ -289,6 +283,7 @@ export const getBuyingMessages = async (req, res) => {
           ]
         }
         },
+        latestMessageId: { $first: "$_id" },
         message: { $first: "$message" },
         createdAt: { $first: "$createdAt" },
         seenAt: { $first: "$seenAt" },
@@ -301,6 +296,7 @@ export const getBuyingMessages = async (req, res) => {
       $project: {
         adId: 1,
         seller: "$_id.seller",
+        latestMessageId: 1,
         message: 1,
         createdAt: 1,
         seenAt: 1,
@@ -308,6 +304,9 @@ export const getBuyingMessages = async (req, res) => {
         to: 1,
         _id: 0
       }
+      },
+      {
+      $sort: { latestMessageId: -1, createdAt: -1, adId: 1, seller: 1 }
       }
     ]);
     // Populate user and ad info
@@ -321,7 +320,8 @@ export const getBuyingMessages = async (req, res) => {
     const filteredMessages = populatedMessages
       .filter(msg => msg.adId)
       .map((msg, idx) => ({
-        id: idx + 1,
+        id: msg.latestMessageId?.toString() || `${msg.adId?._id?.toString() || ''}:${msg.to?._id?.toString() || msg.from?._id?.toString() || ''}`,
+        latestMessageId: msg.latestMessageId?.toString() || '',
         adId: msg.adId?._id || '',
         sellerName: msg.to?.name || '',
         lastMessageFrom: msg.from?._id?.toString(),
@@ -334,10 +334,12 @@ export const getBuyingMessages = async (req, res) => {
         item: msg.adId?.title || '',
         lastMessage: msg.message,
         isSeen: msg.seenAt ? true : false,
+        createdAt: msg.createdAt || null,
         seenAt: msg.seenAt ? formatDate(msg.seenAt) : '',
         time: msg.createdAt ? formatDate(msg.createdAt) : '',
         avatar: msg.to?.avatar || 'https://randomuser.me/api/portraits/men/2.jpg'
-      }));
+      }))
+      .sort((a, b) => (b.latestMessageId || "").localeCompare(a.latestMessageId || ""));
     const count = filteredMessages.length;
     res.json({ filteredMessages, count });
   } catch (err) {
