@@ -464,7 +464,9 @@ export const createAd = async (req, res) => {
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const buildLocationFilter = async (locationId, locationText) => {
-  if (locationId) {
+  let searchString = locationText?.trim() || null;
+
+  if (!searchString && locationId) {
     if (!mongoose.Types.ObjectId.isValid(locationId)) {
       return { notFound: true };
     }
@@ -472,20 +474,14 @@ const buildLocationFilter = async (locationId, locationText) => {
     if (!locationDoc) {
       return { notFound: true };
     }
-    const exactValues = new Set([locationDoc.name]);
-    for (const sub of locationDoc.subLocations || []) {
-      exactValues.add(sub);
-      exactValues.add(`${locationDoc.name}, ${sub}`);
-    }
-    if (locationText?.trim()) {
-      exactValues.add(locationText.trim());
-    }
-    return { location: { $in: [...exactValues] } };
+    searchString = locationDoc.name;
   }
-  if (locationText?.trim()) {
-    return { location: { $regex: escapeRegex(locationText.trim()), $options: "i" } };
+
+  if (!searchString) {
+    return {};
   }
-  return {};
+
+  return { location: { $regex: escapeRegex(searchString), $options: "i" } };
 };
 
 export const getAllAds = async (req, res) => {
