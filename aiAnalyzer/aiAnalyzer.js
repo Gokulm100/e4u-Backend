@@ -560,7 +560,7 @@ Steps:
     throw error;
   }
 }
-export async function generateDescription({ title, category, subCategory, description ,location}) {
+export async function generateDescription({ title, category, subCategory, description ,location,price}) {
   const GROQ_API_KEY = process.env.GROQ_API_KEY;
   
   if (!GROQ_API_KEY) {
@@ -574,9 +574,11 @@ Category: ${category}
 Sub-category: ${subCategory}
 Original description: ${description}
 Location: ${location}
-
+Price: ${price}
 Rules:
 - Keep the same meaning and facts from the original
+- Price should be mentioned in the description if available
+- Location should be mentioned in the description if available
 - Sound natural and human, like someone casually selling their item
 - 2-3 sentences max
 - No exaggerated claims, buzzwords, or salesy language
