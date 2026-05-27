@@ -702,7 +702,7 @@ export const summarizeAdUsingAi = async (req, res) => {
 };
 export const generateDescriptionUsingAI = async (req, res) => {
   try {
-    const { title, category, subCategory, description } = req.body;
+    const { title, category, subCategory, description,location } = req.body;
 
     // Validation
     if (!title || !category ) {
@@ -718,7 +718,8 @@ export const generateDescriptionUsingAI = async (req, res) => {
       title,
       category,
       subCategory,
-      description
+      description,
+      location
     });
 
     console.log('✅ AI description generated successfully');

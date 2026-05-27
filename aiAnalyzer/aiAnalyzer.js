@@ -560,7 +560,7 @@ Steps:
     throw error;
   }
 }
-export async function generateDescription({ title, category, subCategory, description }) {
+export async function generateDescription({ title, category, subCategory, description ,location}) {
   const GROQ_API_KEY = process.env.GROQ_API_KEY;
   
   if (!GROQ_API_KEY) {
@@ -573,6 +573,7 @@ Title: ${title}
 Category: ${category}
 Sub-category: ${subCategory}
 Original description: ${description}
+Location: ${location}
 
 Rules:
 - Keep the same meaning and facts from the original
