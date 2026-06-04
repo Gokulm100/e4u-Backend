@@ -2,6 +2,7 @@ import Chat from "../models/chat.model.js";
 import Ad from "../models/ad.model.js";
 import User from "../models/user.model.js";
 import AdCategory from "../models/ad.category.model.js";
+import ReportReason from "../models/reportReason.model.js";
 import {analyzeDescription,aiSearchAds,analyzeChatForFraud,generateDescription} from "../aiAnalyzer/aiAnalyzer.js";
 import { sendChatNotification } from "../services/pushService.js";
 import { getSocket } from "../socket.js";
@@ -880,6 +881,76 @@ export const enableAd = async (req, res) => {
     return res.json({ message: "Ad enabled successfully" });
   } catch (error) {
     console.error("Error enabling ad:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
+export const reportAd = async (req, res) => {
+  try {
+    const { adId, reasonId } = req.body;
+    if (!adId || !reasonId) {
+      return res.status(400).json({ message: "adId and reasonId are required" });
+    }
+
+    const reason = await ReportReason.findById(reasonId);
+    if (!reason) {
+      return res.status(404).json({ message: "Report reason not found" });
+    }
+
+    const ad = await Ad.findById(adId);
+    if (!ad) {
+      return res.status(404).json({ message: "Ad not found" });
+    }
+
+    // Increment the count for this reason, or add it if it's the first time.
+    const existingReason = ad.reportReasons.find(
+      (entry) => entry.reasonId.toString() === String(reasonId)
+    );
+    if (existingReason) {
+      existingReason.count += 1;
+    } else {
+      ad.reportReasons.push({ reasonId, count: 1 });
+    }
+
+    ad.reportCounter = (ad.reportCounter || 0) + 1;
+
+    // Auto-deactivate the ad once it has been reported enough times.
+    if (ad.reportCounter >= 10) {
+      ad.isActive = false;
+    }
+
+    await ad.save();
+
+    return res.json({
+      message: "Ad reported successfully",
+      reportCounter: ad.reportCounter,
+      reportReasons: ad.reportReasons,
+      isActive: ad.isActive,
+    });
+  } catch (error) {
+    console.error("Error reporting ad:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
+export const getReportReasons = async (req, res) => {
+  try {
+    const reasons = await ReportReason.find({ isActive: true }).sort({ createdAt: -1 });
+    return res.json(reasons);
+  } catch (error) {
+    console.error("Error fetching report reasons:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
+export const createReportReason = async (req, res) => {
+  try {
+    const { reason, description } = req.body;
+    if (!reason) {
+      return res.status(400).json({ message: "reason is required" });
+    }
+
+    const reportReason = await ReportReason.create({ reason, description });
+    return res.status(201).json(reportReason);
+  } catch (error) {
+    console.error("Error creating report reason:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 }

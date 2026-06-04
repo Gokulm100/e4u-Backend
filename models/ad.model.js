@@ -16,6 +16,14 @@ const adSchema = new mongoose.Schema(
         isActive: { type: Boolean, default: true },
         isSold: { type: Boolean, default: false },
         soldTo: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+        reportCounter: { type: Number, default: 0 },
+        reportReasons: [
+            {
+                _id: false,
+                reasonId: { type: mongoose.Schema.Types.ObjectId, ref: "ReportReason", required: true },
+                count: { type: Number, default: 1 },
+            },
+        ],
     },
     { timestamps: true }
 );
