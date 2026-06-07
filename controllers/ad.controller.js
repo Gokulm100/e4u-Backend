@@ -65,6 +65,23 @@ function resolveChatParticipants({ adSellerId, currentUserId, buyerId, sellerId 
   };
 }
 
+function counterpartyUnreadExpr(currentUserId) {
+  return {
+    $max: {
+      $cond: [
+        {
+          $and: [
+            { $ne: ["$from", currentUserId] },
+            { $eq: ["$seenAt", null] },
+          ],
+        },
+        1,
+        0,
+      ],
+    },
+  };
+}
+
 export const getLatestMessages = async (req, res) => {
   try {
     const currentUserId = new mongoose.Types.ObjectId(req.user?.id);
@@ -256,7 +273,8 @@ export const getSellingMessages = async (req, res) => {
         seenAt: { $first: "$seenAt" },
         from: { $first: "$from" },
         to: { $first: "$to" },
-        adId: { $first: "$adId" }
+        adId: { $first: "$adId" },
+        hasUnread: counterpartyUnreadExpr(currentUserId),
       }
       },
       {
@@ -269,6 +287,7 @@ export const getSellingMessages = async (req, res) => {
         seenAt: 1,
         from: 1,
         to: 1,
+        hasUnread: 1,
         _id: 0
       }
       },
@@ -297,7 +316,7 @@ export const getSellingMessages = async (req, res) => {
         toIdStr(msg.from) === buyerIdStr ? msg.from : msg.to
       );
       const lastFromId = toIdStr(msg.from);
-      const isSeen = lastFromId === buyerIdStr ? true : !!msg.seenAt;
+      const isSeen = !msg.hasUnread;
 
       return {
         id: msg.latestMessageId?.toString() || `${toIdStr(msg.adId?._id || msg.adId)}:${buyerIdStr}`,
@@ -377,7 +396,8 @@ export const getBuyingMessages = async (req, res) => {
         seenAt: { $first: "$seenAt" },
         from: { $first: "$from" },
         to: { $first: "$to" },
-        adId: { $first: "$adId" }
+        adId: { $first: "$adId" },
+        hasUnread: counterpartyUnreadExpr(currentUserId),
       }
       },
       {
@@ -390,6 +410,7 @@ export const getBuyingMessages = async (req, res) => {
         seenAt: 1,
         from: 1,
         to: 1,
+        hasUnread: 1,
         _id: 0
       }
       },
@@ -418,7 +439,7 @@ export const getBuyingMessages = async (req, res) => {
         const sellerRef = msg.adId?.seller?.name ? msg.adId.seller : msg.seller;
         const sellerIdStr = toIdStr(msg.adId?.seller) || toIdStr(msg.seller);
         const lastFromId = toIdStr(msg.from);
-        const isSeen = lastFromId === buyerIdStr ? true : !!msg.seenAt;
+        const isSeen = !msg.hasUnread;
 
         return {
           id: msg.latestMessageId?.toString() || `${toIdStr(msg.adId?._id || msg.adId)}:${sellerIdStr}`,
@@ -850,30 +871,63 @@ export const generateDescriptionUsingAI = async (req, res) => {
 };
 export const markMessagesAsSeen = async (req, res) => {
   try {
-    const currentUserId = new mongoose.Types.ObjectId(req.user?.id);
+    const currentUserId = req.user?.id;
     if (!currentUserId) {
       return res.status(401).json({ message: "Unauthorized" });
     }
-    console.log("Marking messages as seen for user:", req.user);
-    const { adId, reader, sender } = req.body;
+
+    const { adId, reader, sender, buyerId, sellerId } = req.body;
     if (!adId) {
       return res.status(400).json({ message: "adId is required" });
     }
-        if (reader == sender) {
+
+    const readerId = toIdStr(reader || currentUserId);
+    const currentUserStr = toIdStr(currentUserId);
+    if (readerId !== currentUserStr) {
+      return res.status(403).json({ message: "Cannot mark messages seen for another user" });
+    }
+
+    const adObjectId = new mongoose.Types.ObjectId(adId);
+    const ad = await Ad.findById(adObjectId).select("seller");
+    if (!ad) {
+      return res.status(404).json({ message: "Ad not found" });
+    }
+
+    let counterpartyId = toIdStr(sender);
+    if (!counterpartyId && buyerId && sellerId) {
+      const resolved = resolveChatParticipants({
+        adSellerId: ad.seller,
+        currentUserId,
+        buyerId,
+        sellerId,
+      });
+      counterpartyId = currentUserStr === toIdStr(resolved.buyerId)
+        ? toIdStr(resolved.sellerId)
+        : toIdStr(resolved.buyerId);
+    }
+
+    if (!counterpartyId) {
+      return res.status(400).json({ message: "sender or buyerId/sellerId is required" });
+    }
+    if (counterpartyId === currentUserStr) {
       return res.status(400).json({ message: "Reader and sender cannot be the same" });
     }
-    // Update messages to set seenAt timestamp
+
     const result = await Chat.updateMany(
-      { from: sender,
-        to: reader,
-        adId: new mongoose.Types.ObjectId(adId)
-      },
       {
-        $set: { seenAt: new Date() }
-      }
+        adId: adObjectId,
+        from: new mongoose.Types.ObjectId(counterpartyId),
+        to: new mongoose.Types.ObjectId(currentUserStr),
+        seenAt: null,
+      },
+      { $set: { seenAt: new Date() } }
     );
 
-    return res.json({ message: "Messages marked as seen", result });
+    return res.json({
+      message: "Messages marked as seen",
+      modifiedCount: result.modifiedCount,
+      matchedCount: result.matchedCount,
+    });
   } catch (error) {
     console.error("Error marking messages as seen:", error);
     return res.status(500).json({ message: "Internal server error" });
