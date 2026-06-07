@@ -46,6 +46,18 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    ratingAvg: {
+      type: Number,
+      default: 0,
+    },
+    reviewCount: {
+      type: Number,
+      default: 0,
+    },
+    completedSales: {
+      type: Number,
+      default: 0,
+    },
     lastViewedAds: [
       {
         type: mongoose.Schema.Types.ObjectId,

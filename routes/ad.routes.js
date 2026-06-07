@@ -1,5 +1,5 @@
 import express from "express";
-import { getLatestMessages,createAd, getAllAds, getAdById, deleteAd,getAllAdCategories,getUserAds,editAd,createChat,getChats,getUserMessages,getBuyingMessages,getSellingMessages,summarizeAdUsingAi ,markMessagesAsSeen,incrementViews,getUsersInterestedInAd,markAdAsSold,disableAd,enableAd,generateDescriptionUsingAI} from "../controllers/ad.controller.js";
+import { getLatestMessages,createAd, getAllAds, getAdById, deleteAd,getAllAdCategories,getUserAds,editAd,createChat,getChats,getUserMessages,getBuyingMessages,getSellingMessages,summarizeAdUsingAi ,markMessagesAsSeen,incrementViews,getUsersInterestedInAd,markAdAsSold,disableAd,enableAd,generateDescriptionUsingAI,reportAd,getReportReasons,createReportReason} from "../controllers/ad.controller.js";
 import authMiddleware from "../middleware/auth.js";
 import fileUpload from "../middleware/fileUpload.js";
 
@@ -14,6 +14,7 @@ router.post("/listUserAds", getUserAds);
 router.post("/", getAllAds);
 router.post("/postAdd", trackUploadRequestStart, authMiddleware, fileUpload.array('images', 5), createAd);
 router.get("/chat",authMiddleware, getChats);
+router.get("/reportReasons", getReportReasons);
 router.get("/:id", getAdById);
 router.delete("/:id", authMiddleware, deleteAd);
 router.put("/edit/:id", trackUploadRequestStart, authMiddleware, fileUpload.array('images', 5), editAd);
@@ -30,6 +31,8 @@ router.post("/getUsersInterestedInAd", getUsersInterestedInAd);
 router.post("/markAdAsSold", authMiddleware, markAdAsSold);
 router.post("/disableAd", authMiddleware, disableAd);
 router.post("/enableAd", authMiddleware, enableAd);
+router.post("/reportAd", authMiddleware, reportAd);
+router.post("/reportReasons", authMiddleware, createReportReason);
 
 
 

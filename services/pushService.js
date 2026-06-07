@@ -29,3 +29,26 @@ export async function sendChatNotification(toFcmToken, messageText, senderName) 
         console.error("Error sending chat notification:", error);
     }
 }
+
+/**
+ * Prompt a user to leave a review after a completed sale
+ */
+export async function sendReviewPromptNotification(toFcmToken, adTitle, revieweeName) {
+  try {
+    const message = {
+      token: toFcmToken,
+      notification: {
+        title: "How was your experience?",
+        body: `Rate your experience for "${adTitle}" with ${revieweeName}.`,
+      },
+      data: {
+        type: "REVIEW_PROMPT",
+        adTitle,
+        revieweeName,
+      },
+    };
+    await messaging.send(message);
+  } catch (error) {
+    console.error("Error sending review prompt notification:", error);
+  }
+}

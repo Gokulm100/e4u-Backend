@@ -2,8 +2,9 @@ import Chat from "../models/chat.model.js";
 import Ad from "../models/ad.model.js";
 import User from "../models/user.model.js";
 import AdCategory from "../models/ad.category.model.js";
+import ReportReason from "../models/reportReason.model.js";
 import {analyzeDescription,aiSearchAds,analyzeChatForFraud,generateDescription} from "../aiAnalyzer/aiAnalyzer.js";
-import { sendChatNotification } from "../services/pushService.js";
+import { sendChatNotification, sendReviewPromptNotification } from "../services/pushService.js";
 import { getSocket } from "../socket.js";
 import mongoose from "mongoose";
 
@@ -530,14 +531,14 @@ export const getAllAds = async (req, res) => {
     if (aiSearch) {
       ads = await Ad.find(filter)
       .populate([
-        { path: "seller", select: "name email" },
+        { path: "seller", select: "name email profilePic createdAt ratingAvg reviewCount completedSales" },
         { path: "category", select: "name description" }
       ])
       .sort({ createdAt: -1, _id: -1 });
     } else {
       ads = await Ad.find(filter)
       .populate([
-        { path: "seller", select: "name email" },
+        { path: "seller", select: "name email profilePic createdAt ratingAvg reviewCount completedSales" },
         { path: "category", select: "name description" }
       ])
       .sort({ createdAt: -1, _id: -1 })
@@ -602,7 +603,7 @@ export const getUserAds = async (req, res) => {
     // Fetch paginated ads for user
     const ads = await Ad.find({ seller: userId })
       .populate([
-        { path: "seller", select: "name email" },
+        { path: "seller", select: "name email profilePic createdAt ratingAvg reviewCount completedSales" },
         { path: "category", select: "name description" }
       ])
       .sort({ createdAt: -1 })
@@ -632,7 +633,10 @@ export const getAllAdCategories = async (req, res) => {
 };
 export const getAdById = async (req, res) => {
   try {
-    const ad = await Ad.findById(req.params.id).populate([{ path: "seller", select: "name email" }, { path: "category", select: "name" }]);
+    const ad = await Ad.findById(req.params.id).populate([
+      { path: "seller", select: "name email profilePic createdAt ratingAvg reviewCount completedSales" },
+      { path: "category", select: "name" },
+    ]);
     if (!ad) return res.status(404).json({ message: "Ad not found" });
     res.json(ad);
   } catch (err) {
@@ -821,21 +825,50 @@ export const getUsersInterestedInAd = async (req, res) => {
 export const markAdAsSold = async (req, res) => {
   try {
     const { adId, buyerId } = req.body;
-    if (!adId ) {
+    if (!adId) {
       return res.status(400).json({ message: "adId is required" });
     }
 
-    const ad = await Ad.findById(adId);
+    const ad = await Ad.findById(adId).populate("seller", "name fcmToken");
     if (!ad) {
       return res.status(404).json({ message: "Ad not found" });
     }
 
+    if (ad.seller._id.toString() !== req.user.id) {
+      return res.status(403).json({ message: "Only the seller can mark this ad as sold" });
+    }
+
+    if (ad.isSold) {
+      return res.status(400).json({ message: "Ad is already marked as sold" });
+    }
+
+    let buyer = null;
+    if (buyerId) {
+      buyer = await User.findById(buyerId).select("name fcmToken");
+      if (!buyer) {
+        return res.status(400).json({ message: "Selected buyer was not found" });
+      }
+      ad.soldTo = buyerId;
+    } else {
+      ad.soldTo = null;
+    }
+
     ad.isSold = true;
-    ad.soldTo = buyerId || null;
-    ad.sellingPrice = ad.amount; // Optionally store the selling price
+    ad.soldAt = new Date();
     await ad.save();
 
-    return res.json({ message: "Success" });
+    if (buyer) {
+      await User.findByIdAndUpdate(ad.seller._id, { $inc: { completedSales: 1 } });
+      if (buyer.fcmToken) {
+        sendReviewPromptNotification(buyer.fcmToken, ad.title, ad.seller.name).catch(() => {});
+      }
+    }
+
+    return res.json({
+      message: "Success",
+      adId: ad._id,
+      reviewPrompt: !!buyerId,
+    });
   } catch (error) {
     console.error("Error marking ad as sold:", error);
     return res.status(500).json({ message: "Internal server error" });
@@ -880,6 +913,76 @@ export const enableAd = async (req, res) => {
     return res.json({ message: "Ad enabled successfully" });
   } catch (error) {
     console.error("Error enabling ad:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
+export const reportAd = async (req, res) => {
+  try {
+    const { adId, reasonId } = req.body;
+    if (!adId || !reasonId) {
+      return res.status(400).json({ message: "adId and reasonId are required" });
+    }
+
+    const reason = await ReportReason.findById(reasonId);
+    if (!reason) {
+      return res.status(404).json({ message: "Report reason not found" });
+    }
+
+    const ad = await Ad.findById(adId);
+    if (!ad) {
+      return res.status(404).json({ message: "Ad not found" });
+    }
+
+    // Increment the count for this reason, or add it if it's the first time.
+    const existingReason = ad.reportReasons.find(
+      (entry) => entry.reasonId.toString() === String(reasonId)
+    );
+    if (existingReason) {
+      existingReason.count += 1;
+    } else {
+      ad.reportReasons.push({ reasonId, count: 1 });
+    }
+
+    ad.reportCounter = (ad.reportCounter || 0) + 1;
+
+    // Auto-deactivate the ad once it has been reported enough times.
+    if (ad.reportCounter >= 10) {
+      ad.isActive = false;
+    }
+
+    await ad.save();
+
+    return res.json({
+      message: "Ad reported successfully",
+      reportCounter: ad.reportCounter,
+      reportReasons: ad.reportReasons,
+      isActive: ad.isActive,
+    });
+  } catch (error) {
+    console.error("Error reporting ad:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
+export const getReportReasons = async (req, res) => {
+  try {
+    const reasons = await ReportReason.find({ isActive: true }).sort({ createdAt: -1 });
+    return res.json(reasons);
+  } catch (error) {
+    console.error("Error fetching report reasons:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
+export const createReportReason = async (req, res) => {
+  try {
+    const { reason, description } = req.body;
+    if (!reason) {
+      return res.status(400).json({ message: "reason is required" });
+    }
+
+    const reportReason = await ReportReason.create({ reason, description });
+    return res.status(201).json(reportReason);
+  } catch (error) {
+    console.error("Error creating report reason:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 }
