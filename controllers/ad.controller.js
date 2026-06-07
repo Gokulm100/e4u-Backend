@@ -150,7 +150,9 @@ export const getChats = async (req, res) => {
 
     const counterpartyId =
       req.user.id === buyerObjectId.toString() ? sellerObjectId : buyerObjectId;
-    const counterpartyUser = await User.findById(counterpartyId).select(PUBLIC_TRUST_SELECT);
+    const counterpartyUser = await User.findById(counterpartyId).select(
+      `${PUBLIC_TRUST_SELECT} reportCounter isBlocked`
+    );
     const counterparty = formatTrustProfile(counterpartyUser);
 
     res.json({ chats, fraudCheck, counterparty });

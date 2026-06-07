@@ -68,6 +68,57 @@ export function deriveBadges(user, trustScore) {
   return [];
 }
 
+const LOW_TRUST_THRESHOLD = 40;
+const LOW_RATING_THRESHOLD = 2.5;
+
+export function getChatTrustCaution(user) {
+  if (!user) return { show: false, reason: null };
+
+  const trustScore = user.trustScore ?? 50;
+  const ratingAvg = user.ratingAvg || 0;
+  const reviewCount = user.reviewCount || 0;
+  const reports = user.reportCounter || 0;
+  const badgeLevel = user.badges?.[0]?.level;
+
+  const hasCautionBadge = badgeLevel === BADGE_LEVELS.CAUTION;
+  const lowTrust = trustScore < LOW_TRUST_THRESHOLD;
+  const lowRating = reviewCount >= 1 && ratingAvg <= LOW_RATING_THRESHOLD;
+
+  if (!hasCautionBadge && !lowTrust && !lowRating) {
+    return { show: false, reason: null };
+  }
+
+  if (lowRating) {
+    return {
+      show: true,
+      reason: `Rated ${ratingAvg.toFixed(1)}★ from past deals — proceed carefully.`,
+    };
+  }
+
+  if (reports >= 2) {
+    return {
+      show: true,
+      reason: "Reported multiple times by other users.",
+    };
+  }
+
+  if (lowTrust) {
+    return {
+      show: true,
+      reason: "Very low trust score — meet in public and pay only after inspecting the item.",
+    };
+  }
+
+  if (hasCautionBadge) {
+    return {
+      show: true,
+      reason: "This account has raised trust concerns.",
+    };
+  }
+
+  return { show: false, reason: null };
+}
+
 async function computeResponseRate(userId) {
   const uid = new mongoose.Types.ObjectId(userId);
   const received = await Chat.find({ to: uid })
@@ -133,7 +184,7 @@ export async function recalculateUserTrust(userId) {
 
 export function formatTrustProfile(user) {
   if (!user) return null;
-  return {
+  const profile = {
     _id: user._id,
     name: user.name,
     profilePic: user.profilePic,
@@ -144,4 +195,6 @@ export function formatTrustProfile(user) {
     badges: user.badges || [],
     responseRate: user.responseRate,
   };
+  profile.caution = getChatTrustCaution(user);
+  return profile;
 }
