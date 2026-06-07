@@ -58,6 +58,22 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    trustScore: {
+      type: Number,
+      default: 50,
+    },
+    responseRate: {
+      type: Number,
+      default: null,
+    },
+    badges: [
+      {
+        _id: false,
+        id: { type: String, required: true },
+        label: { type: String, required: true },
+        level: { type: String, required: true },
+      },
+    ],
     lastViewedAds: [
       {
         type: mongoose.Schema.Types.ObjectId,

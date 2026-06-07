@@ -3,8 +3,13 @@ import Ad from "../models/ad.model.js";
 import User from "../models/user.model.js";
 import Review, { REVIEW_TAGS, REVIEW_EXPIRY_DAYS } from "../models/review.model.js";
 import { sendReviewPromptNotification } from "../services/pushService.js";
+import {
+  PUBLIC_TRUST_SELECT,
+  recalculateUserTrust,
+  formatTrustProfile,
+} from "../services/trustScore.service.js";
 
-const SELLER_SELECT = "name profilePic createdAt ratingAvg reviewCount completedSales";
+const SELLER_SELECT = PUBLIC_TRUST_SELECT;
 
 function getReviewExpiryDate(ad) {
   const soldAt = ad.soldAt || ad.updatedAt || ad.createdAt;
@@ -37,14 +42,7 @@ function getReviewContext(ad, userId) {
 }
 
 async function recalculateUserRating(userId) {
-  const reviews = await Review.find({ reviewee: userId }).select("rating");
-  const reviewCount = reviews.length;
-  const ratingAvg = reviewCount
-    ? Math.round((reviews.reduce((sum, r) => sum + r.rating, 0) / reviewCount) * 10) / 10
-    : 0;
-
-  await User.findByIdAndUpdate(userId, { ratingAvg, reviewCount });
-  return { ratingAvg, reviewCount };
+  return recalculateUserTrust(userId);
 }
 
 export const submitReview = async (req, res) => {
@@ -120,9 +118,13 @@ export const getUserReviews = async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit, 10) || 10, 50);
     const skip = (page - 1) * limit;
 
-    const user = await User.findById(userId).select(SELLER_SELECT);
+    let user = await User.findById(userId).select(`${SELLER_SELECT} reportCounter isBlocked`);
     if (!user) {
       return res.status(404).json({ message: "User not found" });
+    }
+    if (!user.badges?.length) {
+      await recalculateUserTrust(userId);
+      user = await User.findById(userId).select(SELLER_SELECT);
     }
 
     const [reviews, total] = await Promise.all([
@@ -136,7 +138,7 @@ export const getUserReviews = async (req, res) => {
     ]);
 
     res.json({
-      user,
+      user: formatTrustProfile(user) || user,
       reviews,
       page,
       limit,

@@ -7,6 +7,11 @@ import Location from "../models/locations.model.js";
 import Consent from "../models/consent.model.js";
 import { OAuth2Client } from "google-auth-library";
 import jwt from "jsonwebtoken";
+import {
+  PUBLIC_TRUST_SELECT,
+  recalculateUserTrust,
+  formatTrustProfile,
+} from "../services/trustScore.service.js";
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -48,6 +53,7 @@ export const loginUser = async (req, res) => {
         email,
         profilePic: picture,
       });
+      await recalculateUserTrust(user._id);
       // Fetch again to populate lastViewedAds (should be empty on creation)
       user = await User.findById(user._id).populate('lastViewedAds');
     } else {
@@ -171,6 +177,7 @@ export const reportUser = async (req, res) => {
       reportedUser.isBlocked = true;
     }
     await reportedUser.save();
+    await recalculateUserTrust(reportedUserId);
 
     res.json({ message: "User reported successfully" });
   } catch (err) {
@@ -270,6 +277,23 @@ export const removeFromFavorites = async (req, res) => {
     user.favoriteAds.splice(index, 1);
     await user.save();
     res.json({ message: "Ad removed from favorites" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+export const getUserTrust = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    let user = await User.findById(userId).select(`${PUBLIC_TRUST_SELECT} reportCounter isBlocked`);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    if (!user.badges?.length) {
+      await recalculateUserTrust(userId);
+      user = await User.findById(userId).select(PUBLIC_TRUST_SELECT);
+    }
+    res.json({ trust: formatTrustProfile(user) });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
