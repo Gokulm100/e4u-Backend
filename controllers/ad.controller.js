@@ -9,6 +9,61 @@ import { PUBLIC_TRUST_SELECT, recalculateUserTrust, formatTrustProfile } from ".
 import { getSocket } from "../socket.js";
 import mongoose from "mongoose";
 
+function toIdStr(value) {
+  if (value == null || value === "") return "";
+  if (typeof value === "string") return value;
+  if (value._id) return value._id.toString();
+  return value.toString();
+}
+
+function formatDate(date) {
+  if (!date) return "";
+  const toISTDate = (value) =>
+    new Date(new Date(value).toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+
+  const d = toISTDate(date);
+  const now = toISTDate(new Date());
+  const isToday = d.toDateString() === now.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = d.toDateString() === yesterday.toDateString();
+
+  let hours = d.getHours();
+  const minutes = d.getMinutes().toString().padStart(2, "0");
+  const ampm = hours >= 12 ? "PM" : "AM";
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  const timeStr = `${hours}:${minutes} ${ampm}`;
+
+  if (isToday) return `Today ${timeStr}`;
+  if (isYesterday) return `Yesterday ${timeStr}`;
+
+  const day = d.getDate().toString().padStart(2, "0");
+  const month = d.toLocaleString("en-US", { month: "short" }).toUpperCase();
+  const year = d.getFullYear();
+  return `${day} ${month} ${year} ${timeStr}`;
+}
+
+function resolveChatParticipants({ adSellerId, currentUserId, buyerId, sellerId }) {
+  const adSellerStr = toIdStr(adSellerId);
+  const currentUserStr = toIdStr(currentUserId);
+  const resolvedSellerId = new mongoose.Types.ObjectId(adSellerStr);
+
+  if (currentUserStr === adSellerStr) {
+    const buyerStr = [buyerId, sellerId]
+      .map(toIdStr)
+      .find((id) => id && id !== adSellerStr);
+    return {
+      buyerId: new mongoose.Types.ObjectId(buyerStr || toIdStr(buyerId)),
+      sellerId: resolvedSellerId,
+    };
+  }
+
+  return {
+    buyerId: new mongoose.Types.ObjectId(currentUserStr),
+    sellerId: resolvedSellerId,
+  };
+}
 
 export const getLatestMessages = async (req, res) => {
   try {
@@ -116,40 +171,50 @@ export const getUserMessages = async (req, res) => {
 };
 export const getChats = async (req, res) => {
   try {
-    let currentUser = req.user?.name;
+    const currentUserId = req.user?.id;
     const { adId, buyerId, sellerId } = req.query;
     if (!adId || !buyerId || !sellerId) {
       return res.status(400).json({ message: "adId, buyerId, and sellerId are required" });
     }
-    
-    let adObjectId, buyerObjectId, sellerObjectId;
+
+    let adObjectId;
     try {
       adObjectId = new mongoose.Types.ObjectId(adId);
-      buyerObjectId = new mongoose.Types.ObjectId(buyerId);
-      sellerObjectId = new mongoose.Types.ObjectId(sellerId);
     } catch (e) {
       return res.status(400).json({ message: "Invalid adId or userId format" });
     }
-    
-    // Find chats between buyer and seller for this specific ad
+
+    const ad = await Ad.findById(adObjectId).select("seller");
+    if (!ad) {
+      return res.status(404).json({ message: "Ad not found" });
+    }
+
+    const { buyerId: resolvedBuyerId, sellerId: resolvedSellerId } = resolveChatParticipants({
+      adSellerId: ad.seller,
+      currentUserId,
+      buyerId,
+      sellerId,
+    });
+
     const chats = await Chat.find({
       adId: adObjectId,
       $or: [
-        { from: buyerObjectId, to: sellerObjectId },
-        { from: sellerObjectId, to: buyerObjectId }
-      ]
+        { from: resolvedBuyerId, to: resolvedSellerId },
+        { from: resolvedSellerId, to: resolvedBuyerId },
+      ],
     })
-    .populate([
-      { path: "from", select: "name email" },
-      { path: "to", select: "name email" }
-    ])
-    .sort({ createdAt: 1 });
-    const filteredChats = chats.filter(chat => chat.from._id != req.user.id);
-    console.log("Filtered Chats:", filteredChats);
-    const fraudCheck = await analyzeChatForFraud(filteredChats);
+      .populate([
+        { path: "from", select: "name email" },
+        { path: "to", select: "name email" },
+      ])
+      .sort({ createdAt: 1 });
+
+    const fraudCheck = await analyzeChatForFraud(
+      chats.filter((chat) => toIdStr(chat.from?._id || chat.from) !== currentUserId)
+    );
 
     const counterpartyId =
-      req.user.id === buyerObjectId.toString() ? sellerObjectId : buyerObjectId;
+      currentUserId === toIdStr(resolvedBuyerId) ? resolvedSellerId : resolvedBuyerId;
     const counterpartyUser = await User.findById(counterpartyId).select(
       `${PUBLIC_TRUST_SELECT} reportCounter isBlocked`
     );
@@ -218,36 +283,38 @@ export const getSellingMessages = async (req, res) => {
     const populatedMessages = await Chat.populate(messages, [
       { path: "from", select: "name email" },
       { path: "to", select: "name email" },
+      { path: "buyer", model: "User", select: "name email profilePic" },
       { path: "adId", model: "Ad", match: { seller: currentUserId }, select: "title seller" }
     ]);
     // Filter out messages where adId is null (i.e., ad seller is not current user)
+    const sellerIdStr = currentUserId.toString();
     const filteredMessages = populatedMessages
       .filter(msg => msg.adId)
-      .map((msg, idx) => {
-      // Helper to format date as "18 JAN 2025 10:02 AM"
-    
-
-      const buyerId = (msg.to?._id?.toString() === msg.adId?.seller?.toString())
-        ? msg.from?._id?.toString()
-        : msg.to?._id?.toString();
+      .map((msg) => {
+      const buyerIdStr = toIdStr(msg.buyer)
+        || (toIdStr(msg.to) === sellerIdStr ? toIdStr(msg.from) : toIdStr(msg.to));
+      const buyerRef = msg.buyer?.name ? msg.buyer : (
+        toIdStr(msg.from) === buyerIdStr ? msg.from : msg.to
+      );
+      const lastFromId = toIdStr(msg.from);
+      const isSeen = lastFromId === buyerIdStr ? true : !!msg.seenAt;
 
       return {
-        id: msg.latestMessageId?.toString() || `${msg.adId?._id?.toString() || ''}:${buyerId || ''}`,
+        id: msg.latestMessageId?.toString() || `${toIdStr(msg.adId?._id || msg.adId)}:${buyerIdStr}`,
         latestMessageId: msg.latestMessageId?.toString() || '',
-        adId: msg.adId?._id || '',
-        buyerId,
-        sellerId: msg.adId?.seller?.toString() || '',
-        buyerName: (msg.to?._id?.toString() === currentUserId.toString())
-        ? (msg.from?.name || '')
-        : (msg.to?.name || ''),
+        adId: toIdStr(msg.adId?._id || msg.adId),
+        buyerId: buyerIdStr,
+        sellerId: sellerIdStr,
+        buyerName: buyerRef?.name || '',
+        buyerPic: buyerRef?.profilePic || null,
         item: msg.adId?.title || '',
         lastMessage: msg.message,
-        isSeen: msg.seenAt ? true : false,
-        lastMessageFrom: msg.from?._id?.toString(),
+        isSeen,
+        lastMessageFrom: lastFromId,
         createdAt: msg.createdAt || null,
         seenAt: msg.seenAt ? formatDate(msg.seenAt) : '',
         time: msg.createdAt ? formatDate(msg.createdAt) : '',
-        avatar: msg.to?.avatar || 'https://randomuser.me/api/portraits/men/1.jpg'
+        avatar: buyerRef?.profilePic || 'https://randomuser.me/api/portraits/men/1.jpg'
       };
       })
       .sort((a, b) => (b.latestMessageId || "").localeCompare(a.latestMessageId || ""));
@@ -265,21 +332,32 @@ export const getBuyingMessages = async (req, res) => {
     if (!currentUserId) {
       return res.status(401).json({ message: "Unauthorized" });
     }
-    // Find ads NOT posted by current user
-    const otherAds = await Ad.find({ seller: { $ne: currentUserId } }).distinct('_id');
-    // Aggregate latest messages for ads where current user is the buyer (initiator)
+    // Aggregate latest messages on ads the current user does not own
     const messages = await Chat.aggregate([
       {
-      $match: {
-        adId: { $in: otherAds },
-        $or: [
-        { from: currentUserId },
-        { to: currentUserId }
-        ]
-      }
+        $match: {
+          $or: [
+            { from: currentUserId },
+            { to: currentUserId },
+          ],
+        },
       },
       {
-      $sort: { createdAt: -1, _id: -1 }
+        $lookup: {
+          from: "ads",
+          localField: "adId",
+          foreignField: "_id",
+          as: "adDoc",
+        },
+      },
+      { $unwind: "$adDoc" },
+      {
+        $match: {
+          "adDoc.seller": { $ne: currentUserId },
+        },
+      },
+      {
+        $sort: { createdAt: -1, _id: -1 },
       },
       {
       $group: {
@@ -323,6 +401,7 @@ export const getBuyingMessages = async (req, res) => {
     const populatedMessages = await Chat.populate(messages, [
       { path: "from", select: "name email" },
       { path: "to", select: "name email" },
+      { path: "seller", model: "User", select: PUBLIC_TRUST_SELECT },
       {
         path: "adId",
         model: "Ad",
@@ -332,33 +411,39 @@ export const getBuyingMessages = async (req, res) => {
     ]);
 
     // Filter out messages where adId is null (shouldn't happen, but for safety)
+    const buyerIdStr = currentUserId.toString();
     const filteredMessages = populatedMessages
       .filter(msg => msg.adId)
-      .map((msg, idx) => ({
-        id: msg.latestMessageId?.toString() || `${msg.adId?._id?.toString() || ''}:${msg.to?._id?.toString() || msg.from?._id?.toString() || ''}`,
-        latestMessageId: msg.latestMessageId?.toString() || '',
-        adId: msg.adId?._id || '',
-        sellerName: msg.to?.name || '',
-        lastMessageFrom: msg.from?._id?.toString(),
-        buyerName: (msg.to?._id?.toString() === currentUserId.toString())
-          ? (msg.from?.name || '')
-          : (msg.to?.name || ''),
+      .map((msg) => {
+        const sellerRef = msg.adId?.seller?.name ? msg.adId.seller : msg.seller;
+        const sellerIdStr = toIdStr(msg.adId?.seller) || toIdStr(msg.seller);
+        const lastFromId = toIdStr(msg.from);
+        const isSeen = lastFromId === buyerIdStr ? true : !!msg.seenAt;
 
-        buyerId: (msg.to?._id?.toString() === msg.adId?.seller?.toString()) ? msg.from?._id?.toString() : msg.to?._id?.toString(),
-        sellerId: msg.adId?.seller?._id?.toString() || msg.adId?.seller?.toString() || '',
-        sellerPic: msg.adId?.seller?.profilePic || null,
-        sellerRatingAvg: msg.adId?.seller?.ratingAvg || 0,
-        sellerReviewCount: msg.adId?.seller?.reviewCount || 0,
-        sellerTrustScore: msg.adId?.seller?.trustScore ?? 50,
-        sellerBadges: msg.adId?.seller?.badges || [],
-        item: msg.adId?.title || '',
-        lastMessage: msg.message,
-        isSeen: msg.seenAt ? true : false,
-        createdAt: msg.createdAt || null,
-        seenAt: msg.seenAt ? formatDate(msg.seenAt) : '',
-        time: msg.createdAt ? formatDate(msg.createdAt) : '',
-        avatar: msg.to?.avatar || 'https://randomuser.me/api/portraits/men/2.jpg'
-      }))
+        return {
+          id: msg.latestMessageId?.toString() || `${toIdStr(msg.adId?._id || msg.adId)}:${sellerIdStr}`,
+          latestMessageId: msg.latestMessageId?.toString() || '',
+          adId: toIdStr(msg.adId?._id || msg.adId),
+          sellerName: sellerRef?.name || '',
+          lastMessageFrom: lastFromId,
+          buyerName: msg.from?.name === sellerRef?.name ? (msg.to?.name || '') : (msg.from?.name || ''),
+          buyerId: buyerIdStr,
+          sellerId: sellerIdStr,
+          sellerPic: sellerRef?.profilePic || null,
+          sellerRatingAvg: sellerRef?.ratingAvg || 0,
+          sellerReviewCount: sellerRef?.reviewCount || 0,
+          sellerTrustScore: sellerRef?.trustScore ?? 50,
+          sellerBadges: sellerRef?.badges || [],
+          item: msg.adId?.title || '',
+          adImages: msg.adId?.images || [],
+          lastMessage: msg.message,
+          isSeen,
+          createdAt: msg.createdAt || null,
+          seenAt: msg.seenAt ? formatDate(msg.seenAt) : '',
+          time: msg.createdAt ? formatDate(msg.createdAt) : '',
+          avatar: sellerRef?.profilePic || 'https://randomuser.me/api/portraits/men/2.jpg'
+        };
+      })
       .sort((a, b) => (b.latestMessageId || "").localeCompare(a.latestMessageId || ""));
     const count = filteredMessages.length;
     res.json({ filteredMessages, count });
@@ -1006,30 +1091,3 @@ export const createReportReason = async (req, res) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 }
-  const formatDate = (date) => {
-        if (!date) return '';
-        const toISTDate = (value) =>
-          new Date(new Date(value).toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
-
-        const d = toISTDate(date);
-        const now = toISTDate(new Date());
-        const isToday = d.toDateString() === now.toDateString();
-        const yesterday = new Date(now);
-        yesterday.setDate(now.getDate() - 1);
-        const isYesterday = d.toDateString() === yesterday.toDateString();
-
-        let hours = d.getHours();
-        const minutes = d.getMinutes().toString().padStart(2, '0');
-        const ampm = hours >= 12 ? 'PM' : 'AM';
-        hours = hours % 12;
-        hours = hours ? hours : 12;
-        const timeStr = `${hours}:${minutes} ${ampm}`;
-
-        if (isToday) return `Today ${timeStr}`;
-        if (isYesterday) return `Yesterday ${timeStr}`;
-
-        const day = d.getDate().toString().padStart(2, '0');
-        const month = d.toLocaleString('en-US', { month: 'short' }).toUpperCase();
-        const year = d.getFullYear();
-        return `${day} ${month} ${year} ${timeStr}`;
-      };
