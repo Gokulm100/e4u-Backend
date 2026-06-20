@@ -78,17 +78,28 @@ export const saveFcmToken = async (req, res) => {
     const userId = req.user.id;
     const { fcmToken } = req.body;
 
-    if (!fcmToken) {
-      return res.status(400).json({ message: "FCM token is required" });
-    }
-
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
+    // Empty / null token means "clear it" (e.g. on logout). This must succeed
+    // so a logged-out account no longer receives this device's notifications.
+    if (!fcmToken) {
+      user.fcmToken = null;
+      await user.save();
+      return res.json({ message: "FCM token cleared successfully" });
+    }
+
+    // A device token must belong to exactly one user. Detach it from any other
+    // account that may still hold it (e.g. a previous user on this device that
+    // didn't clear it), otherwise notifications would leak across accounts.
+    await User.updateMany(
+      { _id: { $ne: userId }, fcmToken },
+      { $set: { fcmToken: null } }
+    );
+
     user.fcmToken = fcmToken;
-    console.log(user);
     await user.save();
 
     res.json({ message: "FCM token saved successfully" });
