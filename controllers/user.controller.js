@@ -4,6 +4,7 @@ import User from "../models/user.model.js";
 import Report from "../models/report.model.js";
 import ConsentVersion from "../models/consentVersion.model.js";
 import Location from "../models/locations.model.js";
+import { upsertStructuredLocation } from "../services/location.service.js";
 import Consent from "../models/consent.model.js";
 import { OAuth2Client } from "google-auth-library";
 import jwt from "jsonwebtoken";
@@ -227,6 +228,25 @@ export const getLocations = async (req, res) => {
   try {
     const locations = await Location.find();
     res.json({ data: locations });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// Add a new, fully-structured location entered by a user via the
+// "new location" prompt. Keeps the locations collection clean and complete.
+export const addLocation = async (req, res) => {
+  try {
+    let { state, district, city, locality } = req.body;
+    if (!locality || !district) {
+      return res.status(400).json({ message: "locality and district are required" });
+    }
+    // For now we only collect locality + district. Default state to Kerala and
+    // use the district as the city bucket.
+    state = (state && state.trim()) || "Kerala";
+    city = (city && city.trim()) || district.trim();
+    const location = await upsertStructuredLocation({ state, district, city, locality });
+    res.status(201).json({ data: location });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

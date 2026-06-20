@@ -6,6 +6,7 @@ import ReportReason from "../models/reportReason.model.js";
 import {analyzeDescription,aiSearchAds,analyzeChatForFraud,generateDescription} from "../aiAnalyzer/aiAnalyzer.js";
 import { sendChatNotification, sendReviewPromptNotification } from "../services/pushService.js";
 import { PUBLIC_TRUST_SELECT, recalculateUserTrust, formatTrustProfile } from "../services/trustScore.service.js";
+import { ensureLocationExists } from "../services/location.service.js";
 import { getSocket } from "../socket.js";
 import mongoose from "mongoose";
 
@@ -539,6 +540,10 @@ export const editAd = async (req, res) => {
     // Update the ad
     const updatedAd = await Ad.findByIdAndUpdate(adId, updateData, { new: true });
     if (!updatedAd) return res.status(404).json({ message: "Ad not found" });
+
+    // Capture a newly entered location on edit as well.
+    if (updateData.location) ensureLocationExists(updateData.location);
+
     const controllerMs = Date.now() - controllerStart;
     const totalMs = Date.now() - requestStart;
     console.log(`[PUT] /api/ads/edit/${adId} - files=${req.files?.length || 0} controllerMs=${controllerMs} totalMs=${totalMs}`);
@@ -573,6 +578,10 @@ export const createAd = async (req, res) => {
       seller: req.user?.id,
       posted: new Date()
     });
+
+    // Self-growing location list: capture any new location the user entered.
+    if (ad.location) ensureLocationExists(ad.location);
+
     const controllerMs = Date.now() - controllerStart;
     const totalMs = Date.now() - requestStart;
     console.log(`[POST] /api/ads/postAdd - files=${req.files?.length || 0} controllerMs=${controllerMs} totalMs=${totalMs}`);
