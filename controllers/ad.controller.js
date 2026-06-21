@@ -477,12 +477,19 @@ export const getBuyingMessages = async (req, res) => {
 export const createChat = async (req, res) => {
   try {
     const { adId, message, to, from } = req.body;
-    if (!adId || !message || !to || !from) {
+    // An uploaded image (multer + cloudinary) arrives on req.file.
+    const imageUrl = req.file?.path || req.file?.location || req.file?.url || null;
+
+    if (!adId || !to || !from) {
       return res.status(400).json({ message: "Missing required fields" });
+    }
+    // A message must contain text and/or an image.
+    if (!message?.trim() && !imageUrl) {
+      return res.status(400).json({ message: "Message cannot be empty" });
     }
 
     // Create and populate chat message for API and socket payload.
-    const chat = await Chat.create({ adId, message, to, from });
+    const chat = await Chat.create({ adId, message: message || "", to, from, imageUrl });
     const populatedChat = await Chat.findById(chat._id).populate([
       { path: "from", select: "name email avatar" },
       { path: "to", select: "name email avatar" },
@@ -503,7 +510,8 @@ export const createChat = async (req, res) => {
       if (receiver?.fcmToken) {
         console.log(req.user)
         const fromName = req.user?.name || "Someone";
-        sendChatNotification(receiver.fcmToken, message, fromName).catch(console.error);
+        const notifText = message?.trim() ? message : (imageUrl ? "📷 Photo" : "");
+        sendChatNotification(receiver.fcmToken, notifText, fromName).catch(console.error);
       }
     }).catch(console.error);
 

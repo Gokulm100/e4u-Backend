@@ -8,7 +8,11 @@ const chatSchema = new mongoose.Schema({
     },
     message: {
         type: String,
-        required: true
+        default: ""
+    },
+    imageUrl: {
+        type: String,
+        default: null
     },
     seenAt: {
         type: Date,
