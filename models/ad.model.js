@@ -9,6 +9,7 @@ const adSchema = new mongoose.Schema(
         subCategory: { type: String, required: false },
         images: [{ type: String, required: true }],
         description: { type: String, required: true },
+        aiSummary: { type: mongoose.Schema.Types.Mixed, default: null },
         seller: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
         posted: { type: Date, required: true, default: Date.now },
         usersInterested: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],

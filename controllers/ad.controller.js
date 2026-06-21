@@ -17,6 +17,47 @@ function toIdStr(value) {
   return value.toString();
 }
 
+// Build the AI key-value summary for an ad. Best-effort: returns null on any failure
+// so it never blocks ad creation/editing.
+async function buildAdSummary(ad) {
+  try {
+    if (!ad?.description || ad.description.length < 20) return null;
+
+    let categoryName = "";
+    if (ad.category) {
+      if (typeof ad.category === "object" && ad.category.name) {
+        categoryName = ad.category.name;
+      } else {
+        const cat = await AdCategory.findById(ad.category).select("name");
+        categoryName = cat?.name || "";
+      }
+    }
+
+    return await analyzeDescription({
+      adTitle: ad.title,
+      category: categoryName,
+      subCategory: ad.subCategory,
+      description: ad.description,
+    });
+  } catch (err) {
+    console.error("AI summary generation failed:", err?.message);
+    return null;
+  }
+}
+
+// Generate and persist an ad's AI summary in the background (fire-and-forget).
+function refreshAdSummary(adId) {
+  Ad.findById(adId)
+    .then(async (ad) => {
+      if (!ad) return;
+      const summary = await buildAdSummary(ad);
+      if (summary) {
+        await Ad.findByIdAndUpdate(adId, { aiSummary: summary });
+      }
+    })
+    .catch((err) => console.error("refreshAdSummary failed:", err?.message));
+}
+
 function formatDate(date) {
   if (!date) return "";
   const toISTDate = (value) =>
@@ -552,6 +593,11 @@ export const editAd = async (req, res) => {
     // Capture a newly entered location on edit as well.
     if (updateData.location) ensureLocationExists(updateData.location);
 
+    // Regenerate the stored AI summary if any field it depends on changed.
+    if (updateData.description || updateData.title || updateData.category || updateData.subCategory) {
+      refreshAdSummary(updatedAd._id);
+    }
+
     const controllerMs = Date.now() - controllerStart;
     const totalMs = Date.now() - requestStart;
     console.log(`[PUT] /api/ads/edit/${adId} - files=${req.files?.length || 0} controllerMs=${controllerMs} totalMs=${totalMs}`);
@@ -589,6 +635,10 @@ export const createAd = async (req, res) => {
 
     // Self-growing location list: capture any new location the user entered.
     if (ad.location) ensureLocationExists(ad.location);
+
+    // Pre-compute and store the AI summary so ad detail loads can read it from
+    // the DB instead of regenerating it on every view.
+    refreshAdSummary(ad._id);
 
     const controllerMs = Date.now() - controllerStart;
     const totalMs = Date.now() - requestStart;
@@ -802,7 +852,27 @@ export const deleteAd = async (req, res) => {
 };
 export const summarizeAdUsingAi = async (req, res) => {
   try {
-    const { adTitle, category, subCategory, description } = req.body;
+    const { adId, adTitle, category, subCategory, description } = req.body;
+
+    // Preferred path: look the ad up by id and serve its stored summary.
+    // If one isn't stored yet (legacy ad or creation still in flight), generate
+    // it once and persist it so future loads are instant.
+    if (adId) {
+      const ad = await Ad.findById(adId).populate({ path: "category", select: "name" });
+      if (ad) {
+        if (ad.aiSummary && Object.keys(ad.aiSummary).length > 0) {
+          return res.json({ success: true, data: ad.aiSummary, cached: true });
+        }
+
+        console.log('🤖 Generating + caching AI summary for ad', adId);
+        const generated = await buildAdSummary(ad);
+        if (generated) {
+          ad.aiSummary = generated;
+          await ad.save();
+        }
+        return res.json({ success: true, data: generated || {} });
+      }
+    }
 
     // Validation
     if (!description || !category) {
