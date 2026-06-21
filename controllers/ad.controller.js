@@ -546,13 +546,31 @@ export const createChat = async (req, res) => {
       }
     }
 
+    // Resolve conversation participants so the notification can deep-link to the chat.
+    const sellerId = (ad?.seller || populatedChat?.adId?.seller)?.toString();
+    const fromStr = from.toString();
+    const toStr = to.toString();
+    // Buyer is always the non-seller participant.
+    const buyerId = sellerId && fromStr === sellerId ? toStr : fromStr;
+    const recipientIsSeller = sellerId ? toStr === sellerId : false;
+    const adTitle = populatedChat?.adId?.title || "";
+
     // Send push notification to recipient if possible
     User.findById(to).select("fcmToken").then(receiver => {
       if (receiver?.fcmToken) {
         console.log(req.user)
         const fromName = req.user?.name || "Someone";
         const notifText = message?.trim() ? message : (imageUrl ? "📷 Photo" : "");
-        sendChatNotification(receiver.fcmToken, notifText, fromName).catch(console.error);
+        sendChatNotification(receiver.fcmToken, notifText, fromName, {
+          adId: adId,
+          buyerId,
+          sellerId,
+          adTitle,
+          otherName: fromName,
+          isSeller: recipientIsSeller,
+          senderId: fromStr,
+          from: fromStr,
+        }).catch(console.error);
       }
     }).catch(console.error);
 

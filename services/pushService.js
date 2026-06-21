@@ -9,8 +9,14 @@ const messaging = getMessaging(admin.app());
  * @param {string} messageText - The chat message text
  * @param {string} senderName - The sender's name
  */
-export async function sendChatNotification(toFcmToken, messageText, senderName) {
+export async function sendChatNotification(toFcmToken, messageText, senderName, extraData = {}) {
    try {
+    // FCM data values must all be strings.
+    const stringData = {};
+    for (const [key, value] of Object.entries(extraData)) {
+        if (value !== undefined && value !== null) stringData[key] = String(value);
+    }
+
     const message = {
         token: toFcmToken,
         notification: {
@@ -20,7 +26,8 @@ export async function sendChatNotification(toFcmToken, messageText, senderName) 
         data: {
             type: "CHAT",
             senderName,
-            messageText
+            messageText,
+            ...stringData,
         }
     };
     console.log("Sending chat notification:", message);
