@@ -33,12 +33,25 @@ export async function sendChatNotification(toFcmToken, messageText, senderName, 
             senderName,
             messageText,
             ...stringData,
-        }
+        },
+        android: {
+            notification: {
+                channelId: "default",
+            },
+        },
     };
-    console.log("Sending chat notification:", message);
+    console.log("Sending chat notification to token:", toFcmToken.slice(0, 12) + "...");
     await messaging.send(message);
+    console.log("Chat notification sent successfully");
     } catch (error) {
-        console.error("Error sending chat notification:", error);
+        console.error("Error sending chat notification:", error?.code || error?.message || error);
+        if (error?.code === "messaging/registration-token-not-registered"
+            || error?.code === "messaging/invalid-registration-token"
+            || error?.code === "messaging/mismatched-credential") {
+            console.error(
+                "FCM token rejected. Ensure GOOGLE_APPLICATION_CREDENTIALS_JSON on Render uses the same Firebase project as the mobile app (dealr-app-494db)."
+            );
+        }
     }
 }
 
@@ -58,9 +71,14 @@ export async function sendReviewPromptNotification(toFcmToken, adTitle, reviewee
         adTitle,
         revieweeName,
       },
+      android: {
+        notification: {
+          channelId: "default",
+        },
+      },
     };
     await messaging.send(message);
   } catch (error) {
-    console.error("Error sending review prompt notification:", error);
+    console.error("Error sending review prompt notification:", error?.code || error?.message || error);
   }
 }

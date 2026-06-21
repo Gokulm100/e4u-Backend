@@ -103,6 +103,7 @@ export const saveFcmToken = async (req, res) => {
     user.fcmToken = fcmToken;
     await user.save();
 
+    console.log(`FCM token saved for user ${userId}`);
     res.json({ message: "FCM token saved successfully" });
   } catch (err) {
     res.status(500).json({ message: err.message });
