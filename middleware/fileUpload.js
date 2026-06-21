@@ -17,7 +17,7 @@ const storage = new CloudinaryStorage({
         }
 
         return {
-            folder: process.env.CLOUDINARY_FOLDER || 'e4you',
+            folder: process.env.CLOUDINARY_FOLDER || 'dealr',
             resource_type: 'image',
             allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
             transformation: [

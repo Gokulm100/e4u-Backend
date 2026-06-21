@@ -5,7 +5,7 @@
  * so running it multiple times will not create duplicates and will not
  * touch the 77 localities that already exist.
  *
- * Usage (from e4You-backend):
+ * Usage (from dealr-backend):
  *   node scripts/seedTvmLocations.js
  *
  * Requires MONGO_URI in the environment (.env is loaded automatically).
