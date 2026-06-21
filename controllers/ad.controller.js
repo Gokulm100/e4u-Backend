@@ -569,7 +569,6 @@ export const createChat = async (req, res) => {
           otherName: fromName,
           isSeller: recipientIsSeller,
           senderId: fromStr,
-          from: fromStr,
         }).catch(console.error);
       }
     }).catch(console.error);

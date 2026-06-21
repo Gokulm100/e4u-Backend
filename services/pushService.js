@@ -11,10 +11,15 @@ const messaging = getMessaging(admin.app());
  */
 export async function sendChatNotification(toFcmToken, messageText, senderName, extraData = {}) {
    try {
-    // FCM data values must all be strings.
+    // FCM data values must all be strings, and certain keys are reserved by FCM
+    // (e.g. "from", "notification", "message_type", anything starting with
+    // "google" or "gcm"). Including a reserved key makes messaging.send() throw.
+    const RESERVED = new Set(["from", "notification", "message_type", "collapse_key"]);
     const stringData = {};
     for (const [key, value] of Object.entries(extraData)) {
-        if (value !== undefined && value !== null) stringData[key] = String(value);
+        if (value === undefined || value === null) continue;
+        if (RESERVED.has(key) || key.startsWith("google") || key.startsWith("gcm")) continue;
+        stringData[key] = String(value);
     }
 
     const message = {
