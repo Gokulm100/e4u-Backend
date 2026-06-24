@@ -1122,8 +1122,21 @@ export const markAdAsSold = async (req, res) => {
     if (buyer) {
       await User.findByIdAndUpdate(ad.seller._id, { $inc: { completedSales: 1 } });
       await recalculateUserTrust(ad.seller._id);
+      const reviewPayload = {
+        adId: ad._id,
+        adTitle: ad.title,
+      };
       if (buyer.fcmToken) {
-        sendReviewPromptNotification(buyer.fcmToken, ad.title, ad.seller.name).catch(() => {});
+        sendReviewPromptNotification(buyer.fcmToken, {
+          ...reviewPayload,
+          revieweeName: ad.seller.name,
+        }).catch(() => {});
+      }
+      if (ad.seller.fcmToken) {
+        sendReviewPromptNotification(ad.seller.fcmToken, {
+          ...reviewPayload,
+          revieweeName: buyer.name,
+        }).catch(() => {});
       }
     }
 
@@ -1131,6 +1144,7 @@ export const markAdAsSold = async (req, res) => {
       message: "Success",
       adId: ad._id,
       reviewPrompt: !!buyerId,
+      buyerName: buyer?.name || null,
     });
   } catch (error) {
     console.error("Error marking ad as sold:", error);

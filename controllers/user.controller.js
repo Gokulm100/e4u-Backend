@@ -239,13 +239,14 @@ export const getLocations = async (req, res) => {
 export const addLocation = async (req, res) => {
   try {
     let { state, district, city, locality } = req.body;
-    if (!locality || !district) {
-      return res.status(400).json({ message: "locality and district are required" });
+    if (!locality || !district || !city) {
+      return res.status(400).json({ message: "locality, district, and city are required" });
     }
-    // For now we only collect locality + district. Default state to Kerala and
-    // use the district as the city bucket.
+    // Default state to Kerala; locality, district, and city come from the user.
     state = (state && state.trim()) || "Kerala";
-    city = (city && city.trim()) || district.trim();
+    city = city.trim();
+    district = district.trim();
+    locality = locality.trim();
     const location = await upsertStructuredLocation({ state, district, city, locality });
     res.status(201).json({ data: location });
   } catch (err) {

@@ -58,7 +58,7 @@ export async function sendChatNotification(toFcmToken, messageText, senderName, 
 /**
  * Prompt a user to leave a review after a completed sale
  */
-export async function sendReviewPromptNotification(toFcmToken, adTitle, revieweeName) {
+export async function sendReviewPromptNotification(toFcmToken, { adId, adTitle, revieweeName }) {
   try {
     const message = {
       token: toFcmToken,
@@ -68,8 +68,9 @@ export async function sendReviewPromptNotification(toFcmToken, adTitle, reviewee
       },
       data: {
         type: "REVIEW_PROMPT",
-        adTitle,
-        revieweeName,
+        adId: String(adId),
+        adTitle: adTitle || '',
+        revieweeName: revieweeName || '',
       },
       android: {
         notification: {
