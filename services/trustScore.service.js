@@ -121,39 +121,67 @@ export function getChatTrustCaution(user) {
 
 async function computeResponseRate(userId) {
   const uid = new mongoose.Types.ObjectId(userId);
-  const received = await Chat.find({ to: uid })
-    .sort({ createdAt: -1 })
-    .limit(40)
-    .select("adId createdAt")
-    .lean();
-
-  if (received.length === 0) return null;
-
-  let replied = 0;
-  for (const msg of received) {
-    const hasReply = await Chat.exists({
-      adId: msg.adId,
-      from: uid,
-      createdAt: {
-        $gt: msg.createdAt,
-        $lte: new Date(msg.createdAt.getTime() + 86400000),
+  const result = await Chat.aggregate([
+    { $match: { to: uid } },
+    { $sort: { createdAt: -1 } },
+    { $limit: 40 },
+    {
+      $lookup: {
+        from: Chat.collection.name,
+        let: { adId: "$adId", receivedAt: "$createdAt" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ["$adId", "$$adId"] },
+                  { $eq: ["$from", uid] },
+                  { $gt: ["$createdAt", "$$receivedAt"] },
+                  { $lte: ["$createdAt", { $add: ["$$receivedAt", 86400000] }] },
+                ],
+              },
+            },
+          },
+          { $limit: 1 },
+          { $project: { _id: 1 } },
+        ],
+        as: "replies",
       },
-    });
-    if (hasReply) replied += 1;
-  }
+    },
+    {
+      $group: {
+        _id: null,
+        total: { $sum: 1 },
+        replied: {
+          $sum: { $cond: [{ $gt: [{ $size: "$replies" }, 0] }, 1, 0] },
+        },
+      },
+    },
+  ]);
 
-  return Math.round((replied / received.length) * 100) / 100;
+  if (!result.length || !result[0].total) return null;
+
+  const { total, replied } = result[0];
+  return Math.round((replied / total) * 100) / 100;
 }
 
 async function syncReviewAggregates(user) {
-  const reviews = await Review.find({ reviewee: user._id }).select("rating");
-  const reviewCount = reviews.length;
-  const ratingAvg = reviewCount
-    ? Math.round((reviews.reduce((sum, r) => sum + r.rating, 0) / reviewCount) * 10) / 10
-    : 0;
+  const [stats] = await Review.aggregate([
+    { $match: { reviewee: user._id } },
+    {
+      $group: {
+        _id: null,
+        reviewCount: { $sum: 1 },
+        ratingSum: { $sum: "$rating" },
+      },
+    },
+  ]);
 
+  const reviewCount = stats?.reviewCount || 0;
   user.reviewCount = reviewCount;
-  user.ratingAvg = ratingAvg;
+  user.ratingAvg = reviewCount
+    ? Math.round((stats.ratingSum / reviewCount) * 10) / 10
+    : 0;
 }
 
 export async function recalculateUserTrust(userId) {

@@ -26,4 +26,7 @@ const chatSchema = new mongoose.Schema({
     timestamps: true
 });
 
+chatSchema.index({ to: 1, createdAt: -1 });
+chatSchema.index({ adId: 1, from: 1, createdAt: 1 });
+
 export default mongoose.model("Chat", chatSchema);

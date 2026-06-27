@@ -1121,7 +1121,9 @@ export const markAdAsSold = async (req, res) => {
 
     if (buyer) {
       await User.findByIdAndUpdate(ad.seller._id, { $inc: { completedSales: 1 } });
-      await recalculateUserTrust(ad.seller._id);
+      recalculateUserTrust(ad.seller._id).catch((err) => {
+        console.error("Error recalculating trust after sale:", err);
+      });
       const reviewPayload = {
         adId: ad._id,
         adTitle: ad.title,
