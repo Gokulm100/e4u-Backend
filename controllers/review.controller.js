@@ -91,7 +91,9 @@ export const submitReview = async (req, res) => {
       text: String(text).slice(0, 200),
     });
 
-    const reputation = await recalculateUserRating(context.revieweeId);
+    recalculateUserRating(context.revieweeId).catch((err) => {
+      console.error("Error recalculating trust after review:", err);
+    });
 
     const populated = await Review.findById(review._id)
       .populate("reviewer", "name profilePic")
@@ -100,7 +102,6 @@ export const submitReview = async (req, res) => {
     res.status(201).json({
       message: "Review submitted",
       review: populated,
-      reputation,
     });
   } catch (err) {
     if (err.code === 11000) {
